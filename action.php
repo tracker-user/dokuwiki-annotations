@@ -198,9 +198,19 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
         $action = isset($payload['action']) ? (string) $payload['action'] : '';
         // For the read-only 'load' action, accept GET requests without a token.
         // All state-changing actions require a valid DokuWiki security token.
-        if ($action !== 'load' && !checkSecurityToken()) {
-            $this->sendError('Invalid security token.');
-            return;
+        // checkSecurityToken() reads from $_REQUEST (form fields), so when the
+        // request body is JSON we must inject the token from the parsed payload
+        // into $_POST / $_REQUEST before calling it.
+        if ($action !== 'load') {
+            $jsonToken = isset($payload['sectok']) ? (string) $payload['sectok'] : '';
+            if ($jsonToken !== '' && !isset($_REQUEST['sectok'])) {
+                $_POST['sectok']    = $jsonToken;
+                $_REQUEST['sectok'] = $jsonToken;
+            }
+            if (!checkSecurityToken()) {
+                $this->sendError('Invalid security token.');
+                return;
+            }
         }
         $id = isset($payload['id']) ? cleanID((string) $payload['id']) : '';
 
