@@ -69,6 +69,9 @@
     /** Currently open panel element, or null. @type {HTMLElement|null} */
     var _openPanel = null;
 
+    /** Anchor captured on tooltip button mousedown; consumed by click. @type {object|null} */
+    var _pendingAnchor = null;
+
     /** ID of the annotation whose panel is open, or null. @type {string|null} */
     var _openAnnId = null;
 
@@ -1038,11 +1041,14 @@
             setTimeout(function () { handleSelectionEnd(e, content); }, 50);
         });
 
-        // Close tooltip/panel on click outside.
+        // Close tooltip on click outside (but not when clicking the new-form).
         document.addEventListener('mousedown', function (e) {
             var tooltip = document.getElementById('ann-tooltip');
             if (tooltip && !tooltip.contains(e.target)) {
-                hideTooltip();
+                var naf = document.getElementById('ann-new-form');
+                if (!naf || !naf.contains(e.target)) {
+                    hideTooltip();
+                }
             }
         });
     }
@@ -1057,6 +1063,18 @@
     function handleSelectionEnd(e, content) {
         var sel = window.getSelection();
         if (!sel || sel.isCollapsed) {
+            // Don't hide the tooltip if the mouseup came from inside it —
+            // the click handler is responsible for cleanup in that case.
+            var tip = document.getElementById('ann-tooltip');
+            if (tip && tip.contains(e.target)) {
+                return;
+            }
+            // Don't hide if a new-annotation form is open (user clicked
+            // inside the form, collapsing the original selection).
+            var naf = document.getElementById('ann-new-form');
+            if (naf && naf.contains(e.target)) {
+                return;
+            }
             hideTooltip();
             return;
         }
@@ -1068,6 +1086,13 @@
         var text = sel.toString().trim();
         if (text.length < 1) {
             hideTooltip();
+            return;
+        }
+
+        // If the tooltip is already showing (e.g. user moused up after
+        // pressing the Annotate button), don't replace it with a fresh one —
+        // that would orphan the button mid-click and break the click handler.
+        if (document.getElementById('ann-tooltip')) {
             return;
         }
 
@@ -1091,17 +1116,23 @@
         tip.id = 'ann-tooltip';
         tip.className = CLS_TOOLTIP;
 
+        // Capture the anchor on mousedown while the selection is guaranteed
+        // to still exist. By the time 'click' fires, many browsers have
+        // already collapsed the selection, so captureAnchor would return null.
+        // _pendingAnchor is module-level so it survives tooltip replacement.
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = 'Annotate';
         btn.className = 'ann-btn ann-btn-primary';
         btn.addEventListener('mousedown', function (e) {
-            e.preventDefault(); // don't lose the selection
+            e.preventDefault(); // prevent focus-change deselection
+            // Capture now, while the selection is still intact.
+            _pendingAnchor = captureAnchor(sel, range, content);
         });
         btn.addEventListener('click', function () {
-            var anchor = captureAnchor(sel, range, content);
+            var anchor = _pendingAnchor;
+            _pendingAnchor = null;
             hideTooltip();
-            sel.removeAllRanges();
             if (anchor) {
                 openNewAnnotationForm(anchor, range);
             }
@@ -1125,11 +1156,8 @@
         if (tip && tip.parentNode) {
             tip.parentNode.removeChild(tip);
         }
-        // Also remove any floating new-annotation form.
-        var naf = document.getElementById('ann-new-form');
-        if (naf && naf.parentNode) {
-            naf.parentNode.removeChild(naf);
-        }
+        // Note: ann-new-form is NOT removed here — it has its own Cancel
+        // button and must survive the mouseup that fires after the click.
     }
 
     /**
