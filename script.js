@@ -104,16 +104,14 @@
 
         _info      = annInfo;
         _lang      = annInfo.lang || {};
-        _token     = (typeof DOKU_XMLRPC !== 'undefined') ? '' : (jsinfo.token || '');
+        // Token is injected into JSINFO.annotations by action.php (handleMetaHeader).
+        // getSecurityToken() on the server produces it from session_id + REMOTE_USER.
+        _token     = annInfo.token || '';
 
-        // DokuWiki puts the security token in a hidden field on every page.
-        var tokenField = document.getElementById('dw__token');
-        if (tokenField) {
-            _token = tokenField.value;
-        }
-
-        _loggedIn = !!(jsinfo.userinfo && jsinfo.userinfo.user);
-        _isAdmin  = !!(jsinfo.userinfo && jsinfo.userinfo.isadmin);
+        // DokuWiki's JSINFO doesn't include user identity; we inject
+        // user + isAdmin into JSINFO.annotations from PHP (action.php).
+        _loggedIn = !!(annInfo.user && annInfo.user !== '');
+        _isAdmin  = !!(annInfo.isAdmin);
 
         var content = document.getElementById(CONTENT_ID);
         if (!content) {
@@ -1525,7 +1523,7 @@
      */
     function currentUser() {
         var jsinfo = (typeof JSINFO !== 'undefined' && JSINFO) ? JSINFO : {};
-        return (jsinfo.userinfo && jsinfo.userinfo.user) ? jsinfo.userinfo.user : '';
+        return (jsinfo.annotations && jsinfo.annotations.user) ? jsinfo.annotations.user : '';
     }
 
     /**

@@ -130,13 +130,23 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
             return;
         }
 
+        global $INFO;
+
         $enabled = $this->isEnabledForUser();
         $stats   = $helper->getStats($ID);
+
+        // DokuWiki's jsinfo() does not expose user identity, so we inject it
+        // here. JS uses these to gate the selection tooltip and permission UI.
+        $user    = (string) ($_SERVER['REMOTE_USER'] ?? '');
+        $isAdmin = !empty($INFO['isadmin']);
 
         $payload = json_encode([
             'enabled' => $enabled,
             'pageId'  => $ID,
             'stats'   => $stats,
+            'user'    => $user,
+            'isAdmin' => $isAdmin,
+            'token'   => getSecurityToken(),  // CSRF token for AJAX POSTs
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         // The inline script block containing "var JSINFO = ...;" is in
