@@ -45,6 +45,9 @@
 
     var AJAX_URL   = DOKU_BASE + 'lib/exe/ajax.php?call=annotations';
     var CONTENT_ID = 'dokuwiki__content';
+    // .page is the article area inside #dokuwiki__content. Gutter markers
+    // are appended here so position:relative doesn't break the sidebar nav.
+    var PAGE_CLS = 'page';
 
     // Colour tokens (also defined in style.css; kept here so JS can read them)
     var CLS_HIGHLIGHT_OPEN     = 'ann-highlight-open';
@@ -484,27 +487,30 @@
      * Markers are absolutely positioned relative to the content wrapper.
      */
     function renderGutterMarkers() {
-        var content = document.getElementById(CONTENT_ID);
-        if (!content) return;
+        // Append markers to .page (position:relative), not #dokuwiki__content
+        // (which also wraps the sidebar nav and would capture pointer events).
+        var pageEl = document.querySelector('.' + PAGE_CLS);
+        if (!pageEl) return;
 
         _annotations.forEach(function (ann) {
             if (!ann._highlightEl) return; // orphan
 
-            var el   = ann._highlightEl;
-            var rect = el.getBoundingClientRect();
-            var contentRect = content.getBoundingClientRect();
+            var el      = ann._highlightEl;
+            var rect    = el.getBoundingClientRect();
+            var pageRect = pageEl.getBoundingClientRect();
 
             var marker = document.createElement('button');
             marker.className  = CLS_GUTTER_MARKER;
             marker.dataset.annId = ann.id;
             marker.setAttribute('aria-label', 'Annotation');
             marker.type = 'button';
-            marker.style.top = (rect.top - contentRect.top + content.scrollTop) + 'px';
+            // top is relative to .page's top edge + its current scroll offset
+            marker.style.top = (rect.top - pageRect.top + pageEl.scrollTop) + 'px';
             marker.addEventListener('click', function (e) {
                 e.stopPropagation();
                 openPanel(ann.id);
             });
-            content.appendChild(marker);
+            pageEl.appendChild(marker);
             ann._markerEl = marker;
         });
     }

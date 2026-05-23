@@ -103,15 +103,26 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
     // ------------------------------------------------------------------
 
     /**
-     * Add annotation stats and the user's preference to JSINFO so script.js
+     * Add annotation stats and the user preference to JSINFO so script.js
      * does not need an extra round-trip on page load.
+     *
+     * IMPORTANT: tpl_metaheaders() calls jsinfo() and then immediately
+     * JSON-encodes $JSINFO into an inline <script> string BEFORE firing
+     * TPL_METAHEADER_OUTPUT. Writing to $JSINFO here is therefore too late.
+     * Instead we locate that inline script block in $event->data and append
+     * a JSINFO.annotations = {...}; statement so it runs in the same scope.
      *
      * @param Doku_Event $event TPL_METAHEADER_OUTPUT
      * @param mixed       $param
      */
     public function handleMetaHeader(Doku_Event $event, $param)
     {
-        global $ID, $INFO;
+        global $ID, $ACT;
+
+        // Only inject on normal page-view actions.
+        if (!in_array(act_clean($ACT), ['show', 'export_xhtml'], true)) {
+            return;
+        }
 
         /** @var helper_plugin_annotations $helper */
         $helper = $this->loadHelper('annotations', false);
@@ -122,16 +133,27 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
         $enabled = $this->isEnabledForUser();
         $stats   = $helper->getStats($ID);
 
-        // Merge into the global JSINFO array that DokuWiki serialises.
-        global $JSINFO;
-        if (!is_array($JSINFO)) {
-            $JSINFO = [];
-        }
-        $JSINFO['annotations'] = [
+        $payload = json_encode([
             'enabled' => $enabled,
             'pageId'  => $ID,
             'stats'   => $stats,
-        ];
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        // The inline script block containing "var JSINFO = ...;" is in
+        // $event->data['script']. Find it and append our assignment so it
+        // runs in the same scope after JSINFO is already declared.
+        if (!empty($event->data['script'])) {
+            foreach ($event->data['script'] as &$scriptTag) {
+                if (
+                    isset($scriptTag['_data']) &&
+                    strpos($scriptTag['_data'], 'var JSINFO') !== false
+                ) {
+                    $scriptTag['_data'] .= 'JSINFO.annotations=' . $payload . ';';
+                    break;
+                }
+            }
+            unset($scriptTag);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -616,7 +638,7 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
         $this->sendSuccess(['annotations' => $annotations]);
     }
 
-     /**
+        /**
      * Emit a JSON success response and exit.
      *
      * @param array $extra additional fields merged into the response

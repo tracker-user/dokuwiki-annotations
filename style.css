@@ -65,8 +65,10 @@
    Gutter markers
    ========================================================================= */
 
-/* The content area needs relative positioning for gutter markers. */
-#dokuwiki__content {
+/* Gutter markers are positioned relative to .page (the article area only),
+   NOT #dokuwiki__content which also contains the sidebar nav and would
+   break sidebar link click targets. script.js appends markers to .page. */
+.page {
     position: relative;
 }
 
