@@ -1,0 +1,365 @@
+/**
+ * Annotations plugin — stylesheet.
+ *
+ * Colour tokens use DokuWiki's __xxx__ replacement syntax so the theme
+ * controls the palette.  Hard-coded colours are limited to the annotation-
+ * specific highlights (amber / green) which are intentionally opinionated.
+ *
+ * FF78 ESR safe: no :has(), :not() with selectors, aspect-ratio, container
+ * queries, or CSS nesting.
+ */
+
+/* =========================================================================
+   Highlight spans
+   ========================================================================= */
+
+.ann-highlight-open {
+    background-color: rgba(251, 191, 36, 0.35);   /* amber-300 @ 35% */
+    border-bottom: 2px solid rgba(245, 158, 11, 0.7);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.ann-highlight-open:hover {
+    background-color: rgba(251, 191, 36, 0.55);
+}
+
+.ann-highlight-resolved {
+    background-color: rgba(134, 239, 172, 0.30);  /* green-300 @ 30% */
+    border-bottom: 2px solid rgba(74, 222, 128, 0.6);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.ann-highlight-resolved:hover {
+    background-color: rgba(134, 239, 172, 0.50);
+}
+
+/* =========================================================================
+   Counter bar
+   ========================================================================= */
+
+#ann-counter-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5em;
+    padding: 0.4em 0.75em;
+    margin-bottom: 0.75em;
+    font-size: 0.85em;
+    background: __background_alt__;
+    border: 1px solid __border__;
+    border-radius: 4px;
+    color: __text__;
+}
+
+.ann-orphan-link {
+    color: __link__;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+/* =========================================================================
+   Gutter markers
+   ========================================================================= */
+
+/* The content area needs relative positioning for gutter markers. */
+#dokuwiki__content {
+    position: relative;
+}
+
+.ann-gutter-marker {
+    position: absolute;
+    left: -1.6em;
+    width: 1.2em;
+    height: 1.2em;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: rgba(245, 158, 11, 0.75);
+    cursor: pointer;
+    line-height: 1;
+    font-size: 0.6em;
+    transition: background-color 0.15s ease;
+}
+
+.ann-gutter-marker:hover {
+    background-color: rgba(245, 158, 11, 1);
+}
+
+/* =========================================================================
+   Annotation panel
+   ========================================================================= */
+
+.ann-panel {
+    margin: 0.75em 0 1em;
+    border: 1px solid __border__;
+    border-left: 3px solid rgba(245, 158, 11, 0.7);
+    border-radius: 4px;
+    background: __background_alt__;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    font-size: 0.9em;
+}
+
+.ann-panel-header {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0.3em 0.5em 0;
+}
+
+/* =========================================================================
+   Thread entries (annotation + replies)
+   ========================================================================= */
+
+.ann-thread-entry {
+    padding: 0.65em 0.85em;
+    border-bottom: 1px solid __border__;
+}
+
+.ann-thread-entry:last-of-type {
+    border-bottom: none;
+}
+
+.ann-reply {
+    margin-left: 1.5em;
+    background: __background__;
+    border-left: 2px solid __border__;
+    border-radius: 0 0 4px 4px;
+}
+
+/* =========================================================================
+   Meta row (avatar, author, time, status)
+   ========================================================================= */
+
+.ann-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin-bottom: 0.35em;
+    flex-wrap: wrap;
+}
+
+.ann-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.8em;
+    height: 1.8em;
+    border-radius: 50%;
+    background: __link__;
+    color: #fff;
+    font-size: 0.75em;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.ann-author {
+    font-weight: 600;
+    color: __text__;
+}
+
+.ann-time {
+    color: __text_alt__;
+    font-size: 0.85em;
+}
+
+.ann-status {
+    display: inline-block;
+    padding: 0.1em 0.45em;
+    border-radius: 10em;
+    font-size: 0.78em;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.ann-status-open {
+    background: rgba(251, 191, 36, 0.25);
+    color: #92400e;
+    border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+.ann-status-resolved {
+    background: rgba(134, 239, 172, 0.25);
+    color: #166534;
+    border: 1px solid rgba(74, 222, 128, 0.4);
+}
+
+/* =========================================================================
+   Body text and quoted selection
+   ========================================================================= */
+
+.ann-body {
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: __text__;
+    margin-bottom: 0.4em;
+}
+
+.ann-quote {
+    margin: 0.3em 0 0.5em 0;
+    padding: 0.25em 0.6em;
+    border-left: 3px solid rgba(245, 158, 11, 0.6);
+    color: __text_alt__;
+    font-style: italic;
+    font-size: 0.9em;
+    background: rgba(251, 191, 36, 0.08);
+    border-radius: 0 2px 2px 0;
+}
+
+/* =========================================================================
+   Action buttons row
+   ========================================================================= */
+
+.ann-actions {
+    display: flex;
+    gap: 0.4em;
+    flex-wrap: wrap;
+    margin-top: 0.3em;
+}
+
+.ann-btn {
+    display: inline-block;
+    padding: 0.2em 0.55em;
+    font-size: 0.82em;
+    border: 1px solid __border__;
+    border-radius: 3px;
+    background: __background__;
+    color: __text__;
+    cursor: pointer;
+    line-height: 1.4;
+    transition: background-color 0.12s ease;
+}
+
+.ann-btn:hover {
+    background: __background_alt__;
+}
+
+.ann-btn-primary {
+    background: __link__;
+    border-color: __link__;
+    color: #fff;
+}
+
+.ann-btn-primary:hover {
+    opacity: 0.88;
+}
+
+.ann-btn-danger {
+    border-color: #dc2626;
+    color: #dc2626;
+}
+
+.ann-btn-danger:hover {
+    background: rgba(220, 38, 38, 0.08);
+}
+
+.ann-btn-admin {
+    border-color: __border__;
+    color: __text_alt__;
+    font-size: 0.78em;
+}
+
+.ann-close {
+    font-size: 1.1em;
+    line-height: 1;
+    padding: 0.1em 0.35em;
+    border: none;
+    background: none;
+    color: __text_alt__;
+    cursor: pointer;
+}
+
+.ann-close:hover {
+    color: __text__;
+}
+
+/* =========================================================================
+   Reply form + new-annotation form
+   ========================================================================= */
+
+.ann-reply-form,
+.ann-new-form {
+    padding: 0.65em 0.85em;
+    border-top: 1px solid __border__;
+}
+
+.ann-new-form {
+    margin: 0.75em 0 1em;
+    border: 1px solid __border__;
+    border-left: 3px solid rgba(245, 158, 11, 0.7);
+    border-radius: 4px;
+    background: __background_alt__;
+}
+
+.ann-body-input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.4em 0.6em;
+    font: inherit;
+    font-size: 0.9em;
+    border: 1px solid __border__;
+    border-radius: 3px;
+    background: __background__;
+    color: __text__;
+    resize: vertical;
+    margin-bottom: 0.4em;
+}
+
+.ann-body-input:focus {
+    outline: 2px solid __link__;
+    outline-offset: 1px;
+}
+
+.ann-form-row {
+    display: flex;
+    gap: 0.4em;
+}
+
+/* =========================================================================
+   Selection tooltip
+   ========================================================================= */
+
+.ann-tooltip {
+    position: absolute;
+    z-index: 9000;
+    padding: 0.25em 0.4em;
+    background: __background_alt__;
+    border: 1px solid __border__;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+/* =========================================================================
+   Orphan drawer
+   ========================================================================= */
+
+.ann-orphan-drawer {
+    margin: 1.5em 0 0.5em;
+    padding: 0.75em 1em;
+    border: 1px dashed __border__;
+    border-radius: 4px;
+    background: __background_alt__;
+}
+
+.ann-orphan-drawer h4 {
+    margin: 0 0 0.3em;
+    font-size: 0.95em;
+    color: __text_alt__;
+}
+
+.ann-orphan-note {
+    font-size: 0.85em;
+    color: __text_alt__;
+    margin-bottom: 0.75em;
+}
+
+/* =========================================================================
+   Resolved annotation panels: shift to green accent
+   ========================================================================= */
+
+.ann-panel[data-status="resolved"] {
+    border-left-color: rgba(74, 222, 128, 0.6);
+}
