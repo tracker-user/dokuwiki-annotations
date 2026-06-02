@@ -146,14 +146,19 @@ POST bodies are `application/json`. All responses: `{"success": true, ...}` or `
 annotations/
 ├── plugin.info.txt     Plugin manifest
 ├── helper.php          Storage, CRUD, orphan detection, permission rules
-├── action.php          Event hooks, AJAX endpoint
+├── action.php          Event hooks, JSINFO injection, AJAX endpoint
 ├── script.js           Front-end: selection, anchoring, highlights, panels, AJAX
 ├── style.css           Theme-compatible CSS (uses DokuWiki __token__ vars)
+├── lang/
+│   └── en/
+│       └── lang.php    English strings
 ├── README.md           This file
-└── lang/
-    └── en/
-        └── lang.php    English strings
+├── DESIGN.md           Architecture & design reference (for developers)
+└── LICENSE             GPL 2
 ```
+
+> **Developers:** [DESIGN.md](DESIGN.md) covers the architecture — anchoring,
+> storage, the JSINFO-injection mechanism, the permission model, and open gaps.
 
 ## Browser compatibility
 
