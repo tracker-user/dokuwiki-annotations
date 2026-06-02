@@ -136,7 +136,10 @@ class helper_plugin_annotations extends DokuWiki_Plugin
             'version'     => self::SCHEMA_VERSION,
             'annotations' => array_values($list),
         ];
-        return (bool) io_saveFile($this->getFile($id), json_encode($payload, JSON_PRETTY_PRINT));
+        return (bool) io_saveFile(
+            $this->getFile($id),
+            json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+        );
     }
 
     /**

@@ -30,7 +30,7 @@ Hypothes.is and `ep_comments_page`:
 | `action.php` | Event registration; injecting the page payload into `JSINFO`; the AJAX endpoint and **permission enforcement** (gathers facts from DokuWiki globals, calls the helper). |
 | `script.js` | All front-end behaviour: boot/gate, load + re-anchor, highlights, gutter markers, counter, selection→new-annotation flow, thread panels, and AJAX. Plain IIFE, vanilla JS. |
 | `style.css` | Styling via DokuWiki theme tokens (`__background__`, `__text__`, …). Only the amber (open) / green (resolved) highlight colours are hard-coded. |
-| `lang/en/lang.php` | The usersettings toggle label/description (used) plus a set of UI strings that are **not yet wired into the JS** — see *Known gaps*. |
+| `lang/<iso>/lang.php` | The usersettings toggle label/description (PHP side) plus the front-end UI strings under `$lang['js']`, exposed to `script.js` as `LANG.plugins.annotations`. Ships `en`, `de`, `ru`, `ja`. |
 
 Documentation lives in [`README.md`](README.md) (end users) and this file
 (developers); the licence is in `LICENSE` (GPL 2).
@@ -86,11 +86,16 @@ An anchor is `{exact, prefix, suffix, start}`:
 - `start` — a character-offset hint into the page text, used only as a
   tie-breaker.
 
-**Re-anchoring (client, `findRange`)**: collect the content text with a
-`TreeWalker`, search for the normalised `exact`, disambiguate repeats with
-`prefix`/`suffix`, tie-break with the `start` hint, then map the chosen
-character offset back to a DOM `Range` and wrap it in a highlight `<span>`. A
-quote that cannot be located is an orphan (no highlight, no gutter marker).
+**Re-anchoring (client, `locate` + `buildRange`)**: collect the content text
+with a `TreeWalker`, normalise it once with `normalizeWithMap` — which returns
+the normalised string **and** a normalised→raw index map built in lockstep (they
+must share the same trimming, or every highlight shifts by a character) — search
+for the normalised `exact`, disambiguate repeats with `prefix`/`suffix`,
+tie-break with the `start` hint, then map the chosen offset back to a DOM `Range`
+and wrap it in a highlight `<span>`. All matches are located first and wrapped
+last-to-first, so wrapping (which splits text nodes) never disturbs a
+not-yet-wrapped offset. A quote that cannot be located is an orphan (no
+highlight, no gutter marker).
 
 ## Orphan detection (two layers)
 
@@ -116,7 +121,9 @@ gated to `show` / `export_xhtml` views.
 Payload: `{ enabled, pageId, stats, user, isAdmin, token }`. `user`, `isAdmin`
 and `token` are included because stock `JSINFO` exposes no user identity and no
 security token — the script reads them from `JSINFO.annotations`, not from
-`JSINFO.userinfo` (which does not exist) or the `#dw__token` field.
+`JSINFO.userinfo` (which does not exist) or the `#dw__token` field. UI strings
+are **not** in this payload: they travel through DokuWiki's per-plugin JS lang
+bundle, `LANG.plugins.annotations`, built from `$lang['js']`.
 
 ## Per-user toggle
 
@@ -130,7 +137,7 @@ still stored).
 ## Permission model
 
 The rules live in `helper.php` and are pure; `action.php` gathers the facts and
-calls them. `isAdmin` is true for the `admin` group or DokuWiki's `$INFO['isadmin']`.
+calls them. `isAdmin` is DokuWiki's `auth_isadmin()` (superuser / admin group).
 
 | Action | Rule (helper method) |
 |--------|----------------------|
@@ -145,10 +152,9 @@ calls them. `isAdmin` is true for the `admin` group or DokuWiki's `$INFO['isadmi
 
 - **CSRF.** Every state-changing action requires a valid DokuWiki security
   token. The token is injected into `JSINFO.annotations.token` and sent back as
-  `sectok` in the JSON body. Because `checkSecurityToken()` reads `$_REQUEST`
-  (empty for a JSON body), `handleAjax` copies `sectok` into `$_POST`/`$_REQUEST`
-  before validating. The read-only `load` action is exempt (GET, no token) but
-  still ACL-checked.
+  `sectok` in the JSON body. `handleAjax` reads it from the parsed body and
+  passes it straight to `checkSecurityToken($token)`. The read-only `load`
+  action is exempt (GET, no token) but still ACL-checked.
 - **ACL.** `auth_quickaclcheck($id)` gates both reading and writing.
 - **Output.** Bodies are stored as plain text (newlines kept, length-capped) and
   rendered client-side via `textContent`, so user content is never interpolated
@@ -184,19 +190,27 @@ All actions also take the page `id`.
   `async`/`await`, `fetch`, classes, `?.`, `??`, `Map`/`Set` are fine.
 - **PHP:** developed against 8.3; requires the `mbstring` extension.
 
+## Resolved (kept here for history)
+
+- **UI localisation — done.** Front-end strings live under `$lang['js']` and are
+  read in `script.js` via `LANG.plugins.annotations`, each with an English
+  fallback (the `t()` / `fmt()` helpers). `toggle_label` / `toggle_desc` stay
+  PHP-side (`getLang`).
+- **Translations — done.** `en`, `de`, `ru`, `ja` ship, all carrying the same
+  `$lang['js']` keys.
+- **Tests — done.** `_test/` has `GeneralTest` (manifest + the
+  `default.php`↔`metadata.php` invariant) and `HelperTest` (permission rules,
+  CRUD, input cleaning, `findOrphaned` against a rendered page). Run:
+  `composer run test -- --group plugin_annotations`.
+- **Cleanup — done.** The unused `ann-highlight-orphaned` constant is gone, and
+  the panel sets `data-status` so the resolved accent in `style.css` applies.
+
 ## Known gaps / next steps
 
-- **UI localisation.** `script.js` renders hardcoded English; `annInfo.lang` is
-  never populated, so the `counter_*`, `btn_*`, `status_*`, `placeholder_*`,
-  `tooltip_*`, `orphaned_*`, `error_*` and `confirm_*` strings in
-  `lang/en/lang.php` are currently dead. To localise: inject `lang` into the
-  `JSINFO.annotations` payload in `handleMetaHeader` and read `_lang` in the JS
-  string sites. Only `toggle_label` / `toggle_desc` are wired (via `getLang`).
-- **Translations.** No `de` / `ru` / `ja` yet (depends on the localisation work
-  above).
-- **Tests.** No `_test/` suite. Candidates: helper CRUD, input cleaning,
-  permission rules, and `findOrphaned` against a rendered page.
-- **Config.** No `conf/` — nothing is configurable (highlight colours, context
-  length, body cap are all constants/CSS).
-- **Cleanup.** The `ann-highlight-orphaned` JS constant has no CSS rule and no
-  call site (orphans have no in-page range to highlight).
+- **Config.** Still no `conf/` — highlight colours, context length and body cap
+  are constants/CSS. `GeneralTest::testPluginConf` already guards the
+  `default.php`↔`metadata.php` invariant should config be added.
+- **JS cachebuster.** The front-end bundle is keyed by config-file mtimes, not
+  plugin-file mtimes, so after editing `script.js` / `lang` you must bump a main
+  config file (saving any config option does this) for browsers to pull the new
+  bundle.

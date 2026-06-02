@@ -11,6 +11,7 @@ Word- and sentence-level annotations on wiki pages, stored separately from the p
 - **Orphan detection** — when the annotated text is removed from the page, the annotation is flagged as orphaned and stays reachable via the counter. Admins can bulk-delete orphans.
 - **Per-user toggle** — turn the annotation overlay on or off from your user preferences.
 - **No page revisions** — annotations live in a separate file per page; the wiki changelog is never touched.
+- **Localised interface** — English, German, Russian and Japanese, falling back to English for any untranslated string.
 
 ## Requirements
 

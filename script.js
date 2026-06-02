@@ -52,7 +52,6 @@
     // Colour tokens (also defined in style.css; kept here so JS can read them)
     var CLS_HIGHLIGHT_OPEN     = 'ann-highlight-open';
     var CLS_HIGHLIGHT_RESOLVED = 'ann-highlight-resolved';
-    var CLS_HIGHLIGHT_ORPHANED = 'ann-highlight-orphaned';
     var CLS_GUTTER_MARKER      = 'ann-gutter-marker';
     var CLS_PANEL              = 'ann-panel';
     var CLS_COUNTER            = 'ann-counter';
@@ -106,7 +105,9 @@
         }
 
         _info      = annInfo;
-        _lang      = annInfo.lang || {};
+        // UI strings come from DokuWiki's per-plugin JS lang bundle, exposed as
+        // LANG.plugins.annotations (built from lang/<iso>/lang.php $lang['js']).
+        _lang      = uiLang();
         // Token is injected into JSINFO.annotations by action.php (handleMetaHeader).
         // getSecurityToken() on the server produces it from session_id + REMOTE_USER.
         _token     = annInfo.token || '';
@@ -184,22 +185,42 @@
         var content = document.getElementById(CONTENT_ID);
         if (!content) return;
 
-        var orphanCount = 0;
+        // Snapshot the page text ONCE, before any highlight is inserted.
+        // Re-collecting per annotation would exclude already-wrapped text
+        // (collectTextChunks skips our own UI), shifting every later anchor.
+        var chunks  = collectTextChunks(content);
+        var rawFull = chunks.map(function (c) { return c.text; }).join('');
+        var nm      = normalizeWithMap(rawFull);
 
+        // Phase 1 — locate every annotation against the clean snapshot.
+        var hits = [];
         _annotations.forEach(function (ann) {
-            var range = findRange(content, ann.anchor);
-            ann._range   = range; // cache for panel positioning
-            ann._orphaned = !range;
-
-            if (range) {
-                wrapHighlight(range, ann);
+            ann._range       = null;
+            ann._highlightEl = null;
+            var hit = ann.anchor ? locate(nm.norm, ann.anchor) : null;
+            if (hit) {
+                hits.push({ann: ann, pos: hit.pos, len: hit.len});
+                ann._orphaned = false;
             } else {
-                orphanCount++;
+                ann._orphaned = true;
+            }
+        });
+
+        // Phase 2 — wrap later matches first, so wrapping (which splits text
+        // nodes) never invalidates the offsets of earlier, not-yet-wrapped ones.
+        hits.sort(function (a, b) { return b.pos - a.pos; });
+        hits.forEach(function (h) {
+            var range = buildRange(chunks, nm.map, h.pos, h.len);
+            if (range) {
+                h.ann._range = range; // cache for panel positioning
+                wrapHighlight(range, h.ann);
+            } else {
+                h.ann._orphaned = true;
             }
         });
 
         renderGutterMarkers();
-        updateCounter(orphanCount);
+        updateCounter(); // recounts orphans from the _orphaned flags set above
     }
 
     // -----------------------------------------------------------------------
@@ -207,71 +228,61 @@
     // -----------------------------------------------------------------------
 
     /**
-     * Find the DOM Range for an anchor's quoted text.
+     * Locate an anchor's quoted text within the normalised page text.
      *
      * Algorithm:
-     *   1. Collect the page text via TreeWalker.
-     *   2. Search for the exact quote (normalised).
-     *   3. If found multiple times, use prefix/suffix to disambiguate.
-     *   4. If still ambiguous, use the start offset hint.
-     *   5. Map the character offset back to a DOM Range.
+     *   1. Search for the exact quote (normalised).
+     *   2. If found multiple times, use prefix/suffix to disambiguate.
+     *   3. If still ambiguous, use the start offset hint.
      *
-     * @param {HTMLElement} root
-     * @param {object}      anchor  {exact, prefix, suffix, start}
-     * @returns {Range|null}
+     * Returns offsets into the normalised string; buildRange maps them back
+     * to a DOM Range via the normalised→raw index map.
+     *
+     * @param {string} norm    normalised page text (from normalizeWithMap)
+     * @param {object} anchor  {exact, prefix, suffix, start}
+     * @returns {{pos:number, len:number}|null}
      */
-    function findRange(root, anchor) {
+    function locate(norm, anchor) {
         if (!anchor || !anchor.exact) return null;
 
-        var exact  = normalizeWS(anchor.exact);
+        var exact = normalizeWS(anchor.exact);
+        if (exact === '') return null;
         var prefix = normalizeWS(anchor.prefix || '');
         var suffix = normalizeWS(anchor.suffix || '');
         var hint   = anchor.start || 0;
 
-        if (exact === '') return null;
-
-        // Collect all text nodes in document order with their cumulative offsets.
-        var chunks = collectTextChunks(root);
-        var fullText = chunks.map(function (c) { return c.text; }).join('');
-        fullText = normalizeWS(fullText);
-
         // Find all occurrences of exact.
         var positions = [];
-        var search = fullText;
-        var base   = 0;
+        var from = 0;
         var idx;
-        while ((idx = search.indexOf(exact)) !== -1) {
-            positions.push(base + idx);
-            base   += idx + exact.length;
-            search  = search.slice(idx + exact.length);
+        while ((idx = norm.indexOf(exact, from)) !== -1) {
+            positions.push(idx);
+            from = idx + exact.length;
         }
 
         if (positions.length === 0) return null;
 
-        var chosenPos = positions[0];
+        var chosen = positions[0];
 
         if (positions.length > 1) {
-            // Disambiguate using prefix + suffix context.
-            var best = null;
+            // Disambiguate using prefix + suffix context, tie-break on the hint.
             var bestScore = -1;
             positions.forEach(function (pos) {
-                var pre = fullText.slice(Math.max(0, pos - prefix.length), pos);
-                var suf = fullText.slice(pos + exact.length, pos + exact.length + suffix.length);
+                var pre = norm.slice(Math.max(0, pos - prefix.length), pos);
+                var suf = norm.slice(pos + exact.length, pos + exact.length + suffix.length);
                 var score = 0;
                 if (prefix && pre.indexOf(prefix) !== -1) score++;
                 if (suffix && suf.indexOf(suffix) !== -1) score++;
-                // Use start offset as tiebreaker.
                 var distToHint = Math.abs(pos - hint);
-                if (score > bestScore || (score === bestScore && distToHint < Math.abs(chosenPos - hint))) {
+                if (score > bestScore ||
+                    (score === bestScore && distToHint < Math.abs(chosen - hint))) {
                     bestScore = score;
-                    best      = pos;
-                    chosenPos = pos;
+                    chosen    = pos;
                 }
             });
-            if (best !== null) chosenPos = best;
         }
 
-        return buildRange(chunks, chosenPos, exact.length);
+        return {pos: chosen, len: exact.length};
     }
 
     /**
@@ -328,31 +339,18 @@
     }
 
     /**
-     * Turn character offsets (in the normalised full string) back into a
-     * DOM Range.
+     * Turn a (start, length) offset in the normalised page text back into a
+     * DOM Range, using the normalised→raw index map.
      *
      * @param {Array<{node:Text, start:number, text:string}>} chunks
-     * @param {number} startOff  start char offset in joined (raw) text
-     * @param {number} length    length of selection in normalised text
+     * @param {Array<number>} map       normalised index → raw index (normalizeWithMap)
+     * @param {number}        startOff  start offset in the normalised text
+     * @param {number}        length    length in normalised characters
      * @returns {Range|null}
      */
-    function buildRange(chunks, startOff, length) {
-        // The fullText we searched is normalised (multiple spaces → one), but
-        // chunk offsets are raw. We need to find the raw offset that corresponds
-        // to startOff in the normalised string.
-        //
-        // Simple approach: walk chunks until we've "consumed" startOff
-        // normalised characters (counting consecutive spaces as 1).
-        // This works well enough for typical wiki prose.
-
-        var rawFull  = chunks.map(function (c) { return c.text; }).join('');
-        var normFull = normalizeWS(rawFull);
-
-        // Build a map: normFull[i] → rawFull[j]
-        var normToRaw = buildNormToRaw(rawFull);
-
-        var rawStart = normToRaw[startOff];
-        var rawEnd   = normToRaw[startOff + length - 1];
+    function buildRange(chunks, map, startOff, length) {
+        var rawStart = map[startOff];
+        var rawEnd   = map[startOff + length - 1];
         if (rawStart === undefined || rawEnd === undefined) return null;
         rawEnd++; // exclusive
 
@@ -388,30 +386,43 @@
     }
 
     /**
-     * Build an array mapping normalised-string index → raw-string index.
-     * Consecutive whitespace is collapsed to a single space; the mapping
-     * records the index of the first character in each run.
+     * Normalise raw text exactly as normalizeWS does (collapse each whitespace
+     * run to a single space, trim both ends) while recording, for every
+     * character of the normalised string, the index of the raw character it
+     * came from. Returns {norm, map} with raw.charAt(map[i]) === norm.charAt(i)
+     * (a collapsed internal space maps to the first char of its run).
+     *
+     * Normalisation and the index map MUST stay in lockstep: an earlier
+     * version built the map without trimming, so a leading whitespace text
+     * node (DokuWiki indents its content markup, so there always is one)
+     * shifted every highlight one character to the left.
      *
      * @param {string} raw
-     * @returns {Array<number>}
+     * @returns {{norm:string, map:Array<number>}}
      */
-    function buildNormToRaw(raw) {
-        var map     = [];
-        var inSpace = false;
+    function normalizeWithMap(raw) {
+        var norm     = '';
+        var map      = [];
+        var inRun    = false;
+        var runStart = 0;
         for (var i = 0; i < raw.length; i++) {
-            var ch = raw[i];
-            if (/\s/.test(ch)) {
-                if (!inSpace) {
-                    map.push(i); // one representative space
-                    inSpace = true;
-                }
-                // else: extra whitespace chars are skipped
-            } else {
-                map.push(i);
-                inSpace = false;
+            if (/\s/.test(raw[i])) {
+                if (!inRun) { inRun = true; runStart = i; }
+                continue;
             }
+            if (inRun) {
+                inRun = false;
+                // internal run → one representative space; leading run → dropped
+                if (norm.length > 0) {
+                    norm += ' ';
+                    map.push(runStart);
+                }
+            }
+            norm += raw[i];
+            map.push(i);
         }
-        return map;
+        // a trailing whitespace run is dropped (matches trim)
+        return {norm: norm, map: map};
     }
 
     // -----------------------------------------------------------------------
@@ -466,7 +477,7 @@
      */
     function clearHighlights() {
         var spans = document.querySelectorAll(
-            '.' + CLS_HIGHLIGHT_OPEN + ', .' + CLS_HIGHLIGHT_RESOLVED + ', .' + CLS_HIGHLIGHT_ORPHANED
+            '.' + CLS_HIGHLIGHT_OPEN + ', .' + CLS_HIGHLIGHT_RESOLVED
         );
         Array.prototype.forEach.call(spans, function (span) {
             var parent = span.parentNode;
@@ -503,7 +514,7 @@
             var marker = document.createElement('button');
             marker.className  = CLS_GUTTER_MARKER;
             marker.dataset.annId = ann.id;
-            marker.setAttribute('aria-label', 'Annotation');
+            marker.setAttribute('aria-label', t('label_annotation', 'Annotation'));
             marker.type = 'button';
             // top is relative to .page's top edge + its current scroll offset
             marker.style.top = (rect.top - pageRect.top + pageEl.scrollTop) + 'px';
@@ -548,8 +559,8 @@
 
         var total = stats.total || 0;
         var label = total === 1
-            ? '1 annotation'
-            : total + ' annotations';
+            ? t('counter_annotation', '1 annotation')
+            : fmt(t('counter_annotations', '%d annotations'), total);
         bar.appendChild(document.createTextNode(label));
 
         if (orphanCount > 0) {
@@ -557,7 +568,7 @@
             var orphanLink = document.createElement('a');
             orphanLink.href = '#ann-orphan-drawer';
             orphanLink.className = 'ann-orphan-link';
-            orphanLink.textContent = orphanCount + ' orphaned';
+            orphanLink.textContent = fmt(t('counter_orphaned', '%d orphaned'), orphanCount);
             orphanLink.addEventListener('click', function (e) {
                 e.preventDefault();
                 toggleOrphanDrawer();
@@ -570,7 +581,7 @@
                 var btnCR = document.createElement('button');
                 btnCR.type = 'button';
                 btnCR.className = 'ann-btn ann-btn-admin';
-                btnCR.textContent = 'Clear resolved';
+                btnCR.textContent = t('btn_clear_resolved', 'Clear resolved');
                 btnCR.addEventListener('click', doClearResolved);
                 bar.appendChild(btnCR);
             }
@@ -578,7 +589,7 @@
                 var btnCO = document.createElement('button');
                 btnCO.type = 'button';
                 btnCO.className = 'ann-btn ann-btn-admin';
-                btnCO.textContent = 'Clear orphaned';
+                btnCO.textContent = t('btn_clear_orphaned', 'Clear orphaned');
                 btnCO.addEventListener('click', doClearOrphaned);
                 bar.appendChild(btnCO);
             }
@@ -687,7 +698,8 @@
     function buildPanel(ann) {
         var panel = document.createElement('div');
         panel.className = CLS_PANEL;
-        panel.dataset.annId = ann.id;
+        panel.dataset.annId  = ann.id;
+        panel.dataset.status = ann.status || 'open'; // drives the resolved accent in style.css
 
         // Header
         var header = document.createElement('div');
@@ -696,7 +708,7 @@
         var closeBtn = document.createElement('button');
         closeBtn.type = 'button';
         closeBtn.className = 'ann-btn ann-close';
-        closeBtn.setAttribute('aria-label', 'Close');
+        closeBtn.setAttribute('aria-label', t('label_close', 'Close'));
         closeBtn.textContent = '×';
         closeBtn.addEventListener('click', closePanel);
         header.appendChild(closeBtn);
@@ -757,7 +769,9 @@
             var resolveBtn = document.createElement('button');
             resolveBtn.type = 'button';
             resolveBtn.className = 'ann-btn ann-btn-resolve';
-            resolveBtn.textContent = ann.status === 'resolved' ? 'Reopen' : 'Resolve';
+            resolveBtn.textContent = ann.status === 'resolved'
+                ? t('btn_reopen', 'Reopen')
+                : t('btn_resolve', 'Resolve');
             resolveBtn.addEventListener('click', function () {
                 doResolve(ann.id, ann.status === 'resolved' ? 'open' : 'resolved');
             });
@@ -770,7 +784,7 @@
             var editBtn = document.createElement('button');
             editBtn.type = 'button';
             editBtn.className = 'ann-btn';
-            editBtn.textContent = 'Edit';
+            editBtn.textContent = t('btn_edit', 'Edit');
             editBtn.addEventListener('click', function () {
                 showEditForm(entry, ann, 'annotation');
             });
@@ -779,9 +793,9 @@
             var delBtn = document.createElement('button');
             delBtn.type = 'button';
             delBtn.className = 'ann-btn ann-btn-danger';
-            delBtn.textContent = 'Delete';
+            delBtn.textContent = t('btn_delete', 'Delete');
             delBtn.addEventListener('click', function () {
-                if (confirm('Delete this annotation?')) {
+                if (confirm(t('confirm_delete', 'Delete this annotation?'))) {
                     doDeleteAnnotation(ann.id);
                 }
             });
@@ -819,7 +833,7 @@
             var editBtn = document.createElement('button');
             editBtn.type = 'button';
             editBtn.className = 'ann-btn';
-            editBtn.textContent = 'Edit';
+            editBtn.textContent = t('btn_edit', 'Edit');
             editBtn.addEventListener('click', function () {
                 showEditForm(entry, {annId: ann.id, replyId: reply.id, body: reply.body}, 'reply');
             });
@@ -828,9 +842,9 @@
             var delBtn = document.createElement('button');
             delBtn.type = 'button';
             delBtn.className = 'ann-btn ann-btn-danger';
-            delBtn.textContent = 'Delete';
+            delBtn.textContent = t('btn_delete', 'Delete');
             delBtn.addEventListener('click', function () {
-                if (confirm('Delete this reply?')) {
+                if (confirm(t('confirm_delete_reply', 'Delete this reply?'))) {
                     doDeleteReply(ann.id, reply.id);
                 }
             });
@@ -860,7 +874,7 @@
 
         var authorEl = document.createElement('span');
         authorEl.className = 'ann-author';
-        authorEl.textContent = author || 'Unknown';
+        authorEl.textContent = author || t('label_unknown', 'Unknown');
         meta.appendChild(authorEl);
 
         var timeEl = document.createElement('time');
@@ -873,7 +887,9 @@
         if (status) {
             var pill = document.createElement('span');
             pill.className = 'ann-status ann-status-' + status;
-            pill.textContent = status === 'resolved' ? 'Resolved' : 'Open';
+            pill.textContent = status === 'resolved'
+                ? t('status_resolved', 'Resolved')
+                : t('status_open', 'Open');
             meta.appendChild(pill);
         }
 
@@ -892,7 +908,7 @@
 
         var ta = document.createElement('textarea');
         ta.className = 'ann-body-input';
-        ta.placeholder = 'Write a reply…';
+        ta.placeholder = t('placeholder_reply', 'Write a reply…');
         ta.rows = 3;
         form.appendChild(ta);
 
@@ -902,7 +918,7 @@
         var submitBtn = document.createElement('button');
         submitBtn.type = 'button';
         submitBtn.className = 'ann-btn ann-btn-primary';
-        submitBtn.textContent = 'Reply';
+        submitBtn.textContent = t('btn_reply', 'Reply');
         submitBtn.addEventListener('click', function () {
             var body = ta.value.trim();
             if (!body) return;
@@ -938,7 +954,7 @@
         var saveBtn = document.createElement('button');
         saveBtn.type = 'button';
         saveBtn.className = 'ann-btn ann-btn-primary';
-        saveBtn.textContent = 'Save';
+        saveBtn.textContent = t('btn_save', 'Save');
         saveBtn.addEventListener('click', function () {
             var newBody = ta.value.trim();
             if (!newBody) return;
@@ -952,7 +968,7 @@
         var cancelBtn = document.createElement('button');
         cancelBtn.type = 'button';
         cancelBtn.className = 'ann-btn';
-        cancelBtn.textContent = 'Cancel';
+        cancelBtn.textContent = t('btn_cancel', 'Cancel');
         cancelBtn.addEventListener('click', function () {
             entry.removeChild(ta);
             entry.removeChild(row);
@@ -996,12 +1012,13 @@
         drawer.className = CLS_ORPHAN_DRAWER;
 
         var heading = document.createElement('h4');
-        heading.textContent = 'Orphaned annotations';
+        heading.textContent = t('orphaned_heading', 'Orphaned annotations');
         drawer.appendChild(heading);
 
         var note = document.createElement('p');
         note.className = 'ann-orphan-note';
-        note.textContent = 'These annotations reference text that no longer appears on the page.';
+        note.textContent = t('orphaned_note',
+            'These annotations reference text that no longer appears on the page.');
         drawer.appendChild(note);
 
         var found = false;
@@ -1014,7 +1031,7 @@
 
         if (!found) {
             var empty = document.createElement('p');
-            empty.textContent = 'None.';
+            empty.textContent = t('orphaned_none', 'None.');
             drawer.appendChild(empty);
         }
 
@@ -1122,7 +1139,7 @@
         // _pendingAnchor is module-level so it survives tooltip replacement.
         var btn = document.createElement('button');
         btn.type = 'button';
-        btn.textContent = 'Annotate';
+        btn.textContent = t('btn_annotate', 'Annotate');
         btn.className = 'ann-btn ann-btn-primary';
         btn.addEventListener('mousedown', function (e) {
             e.preventDefault(); // prevent focus-change deselection
@@ -1175,7 +1192,8 @@
         // Get full page text for prefix/suffix and start computation.
         var chunks   = collectTextChunks(content);
         var fullRaw  = chunks.map(function (c) { return c.text; }).join('');
-        var fullNorm = normalizeWS(fullRaw);
+        var nm       = normalizeWithMap(fullRaw);
+        var fullNorm = nm.norm;
 
         // Find where this text node + offset lands in the raw full text.
         var rawStart = 0;
@@ -1187,11 +1205,11 @@
             }
         }
 
-        // Map raw offset to normalised offset.
-        var normToRaw = buildNormToRaw(fullRaw);
-        var normStart = 0;
-        for (var j = 0; j < normToRaw.length; j++) {
-            if (normToRaw[j] >= rawStart) {
+        // Map that raw offset to an offset in the normalised text, using the
+        // same map as re-anchoring so capture and find stay in agreement.
+        var normStart = nm.norm.length;
+        for (var j = 0; j < nm.map.length; j++) {
+            if (nm.map[j] >= rawStart) {
                 normStart = j;
                 break;
             }
@@ -1230,7 +1248,7 @@
 
         var ta = document.createElement('textarea');
         ta.className = 'ann-body-input';
-        ta.placeholder = 'Add a comment…';
+        ta.placeholder = t('placeholder_body', 'Add a comment…');
         ta.rows = 4;
         form.appendChild(ta);
 
@@ -1240,7 +1258,7 @@
         var submitBtn = document.createElement('button');
         submitBtn.type = 'button';
         submitBtn.className = 'ann-btn ann-btn-primary';
-        submitBtn.textContent = 'Annotate';
+        submitBtn.textContent = t('btn_annotate', 'Annotate');
         submitBtn.addEventListener('click', function () {
             var body = ta.value.trim();
             if (!body) return;
@@ -1252,7 +1270,7 @@
         var cancelBtn = document.createElement('button');
         cancelBtn.type = 'button';
         cancelBtn.className = 'ann-btn';
-        cancelBtn.textContent = 'Cancel';
+        cancelBtn.textContent = t('btn_cancel', 'Cancel');
         cancelBtn.addEventListener('click', function () {
             if (form.parentNode) form.parentNode.removeChild(form);
         });
@@ -1290,7 +1308,7 @@
             body:   body,
         }).then(function (data) {
             if (!data.success) {
-                alert('Could not save annotation: ' + (data.error || 'Unknown error'));
+                showError(t('error_save', 'Could not save — please try again.'), data);
                 return;
             }
             var ann = data.annotation;
@@ -1298,7 +1316,7 @@
             if (typeof onSuccess === 'function') onSuccess(ann);
             renderAll();
         }).catch(function () {
-            alert('Could not save annotation.');
+            alert(t('error_save', 'Could not save — please try again.'));
         });
     }
 
@@ -1317,7 +1335,7 @@
             body:   body,
         }).then(function (data) {
             if (!data.success) {
-                alert('Could not save reply: ' + (data.error || ''));
+                showError(t('error_save', 'Could not save — please try again.'), data);
                 return;
             }
             // Re-fetch the updated annotation from server.
@@ -1326,7 +1344,7 @@
                 reopenPanel(annId);
             });
         }).catch(function () {
-            alert('Could not save reply.');
+            alert(t('error_save', 'Could not save — please try again.'));
         });
     }
 
@@ -1344,7 +1362,7 @@
             body:   body,
         }).then(function (data) {
             if (!data.success) {
-                alert('Could not save: ' + (data.error || ''));
+                showError(t('error_save', 'Could not save — please try again.'), data);
                 return;
             }
             var updated = data.annotation;
@@ -1369,7 +1387,7 @@
             body:     body,
         }).then(function (data) {
             if (!data.success) {
-                alert('Could not save: ' + (data.error || ''));
+                showError(t('error_save', 'Could not save — please try again.'), data);
                 return;
             }
             var updated = data.annotation;
@@ -1390,7 +1408,7 @@
             annId:  annId,
         }).then(function (data) {
             if (!data.success) {
-                alert('Could not delete: ' + (data.error || ''));
+                showError(t('error_delete', 'Could not delete — please try again.'), data);
                 return;
             }
             _annotations.delete(annId);
@@ -1413,7 +1431,7 @@
             replyId: replyId,
         }).then(function (data) {
             if (!data.success) {
-                alert('Could not delete: ' + (data.error || ''));
+                showError(t('error_delete', 'Could not delete — please try again.'), data);
                 return;
             }
             var updated = data.annotation;
@@ -1436,7 +1454,7 @@
             status: status,
         }).then(function (data) {
             if (!data.success) {
-                alert('Could not update status: ' + (data.error || ''));
+                showError(t('error_status', 'Could not update the status — please try again.'), data);
                 return;
             }
             var updated = data.annotation;
@@ -1450,13 +1468,13 @@
      * POST clear_resolved (admin).
      */
     function doClearResolved() {
-        if (!confirm('Delete all resolved annotations on this page?')) return;
+        if (!confirm(t('confirm_clear_resolved', 'Delete all resolved annotations on this page?'))) return;
         ajax({
             action: 'clear_resolved',
             id:     _info.pageId,
         }).then(function (data) {
             if (!data.success) {
-                alert('Could not clear: ' + (data.error || ''));
+                showError(t('error_clear', 'Could not clear — please try again.'), data);
                 return;
             }
             // Remove resolved from local state.
@@ -1472,13 +1490,13 @@
      * POST clear_orphaned (admin).
      */
     function doClearOrphaned() {
-        if (!confirm('Delete all orphaned annotations on this page?')) return;
+        if (!confirm(t('confirm_clear_orphaned', 'Delete all orphaned annotations on this page?'))) return;
         ajax({
             action: 'clear_orphaned',
             id:     _info.pageId,
         }).then(function (data) {
             if (!data.success) {
-                alert('Could not clear: ' + (data.error || ''));
+                showError(t('error_clear', 'Could not clear — please try again.'), data);
                 return;
             }
             _annotations.forEach(function (ann, id) {
@@ -1535,6 +1553,55 @@
     // -----------------------------------------------------------------------
 
     /**
+     * The per-plugin JS language bundle, exposed by DokuWiki as
+     * LANG.plugins.annotations (built from lang/<iso>/lang.php $lang['js']).
+     *
+     * @returns {object}
+     */
+    function uiLang() {
+        if (typeof LANG !== 'undefined' && LANG && LANG.plugins && LANG.plugins.annotations) {
+            return LANG.plugins.annotations;
+        }
+        return {};
+    }
+
+    /**
+     * Look up a UI string by key, falling back to the supplied English text if
+     * the bundle is missing the key (e.g. a lang file not yet updated).
+     *
+     * @param {string} key
+     * @param {string} fallback  English default
+     * @returns {string}
+     */
+    function t(key, fallback) {
+        var s = _lang[key];
+        return (s === undefined || s === null || s === '') ? fallback : s;
+    }
+
+    /**
+     * Substitute a single %d placeholder with a number.
+     *
+     * @param {string} str
+     * @param {number} n
+     * @returns {string}
+     */
+    function fmt(str, n) {
+        return String(str).replace('%d', n);
+    }
+
+    /**
+     * Show a localised error, appending the server's reason in parentheses
+     * when one is present.
+     *
+     * @param {string} base  localised message
+     * @param {object} data  AJAX response ({error?:string})
+     */
+    function showError(base, data) {
+        var reason = (data && data.error) ? data.error : '';
+        alert(reason ? base + ' (' + reason + ')' : base);
+    }
+
+    /**
      * Collapse consecutive whitespace to a single space and trim.
      *
      * @param {string} s
@@ -1563,10 +1630,10 @@
     function formatDate(d) {
         var now  = new Date();
         var diff = (now - d) / 1000; // seconds
-        if (diff < 60)              return 'just now';
-        if (diff < 3600)            return Math.floor(diff / 60)   + 'm ago';
-        if (diff < 86400)           return Math.floor(diff / 3600) + 'h ago';
-        if (diff < 86400 * 7)       return Math.floor(diff / 86400) + 'd ago';
+        if (diff < 60)        return t('time_now', 'just now');
+        if (diff < 3600)      return fmt(t('time_minutes', '%dm ago'), Math.floor(diff / 60));
+        if (diff < 86400)     return fmt(t('time_hours',   '%dh ago'), Math.floor(diff / 3600));
+        if (diff < 86400 * 7) return fmt(t('time_days',    '%dd ago'), Math.floor(diff / 86400));
         return d.toLocaleDateString();
     }
 

@@ -130,15 +130,15 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
             return;
         }
 
-        global $INFO;
+        global $INPUT;
 
         $enabled = $this->isEnabledForUser();
         $stats   = $helper->getStats($ID);
 
         // DokuWiki's jsinfo() does not expose user identity, so we inject it
         // here. JS uses these to gate the selection tooltip and permission UI.
-        $user    = (string) ($_SERVER['REMOTE_USER'] ?? '');
-        $isAdmin = !empty($INFO['isadmin']);
+        $user    = $INPUT->server->str('REMOTE_USER');
+        $isAdmin = auth_isadmin();
 
         $payload = json_encode([
             'enabled' => $enabled,
@@ -202,12 +202,10 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
         // request body is JSON we must inject the token from the parsed payload
         // into $_POST / $_REQUEST before calling it.
         if ($action !== 'load') {
+            // checkSecurityToken() accepts the token directly, so we hand it the
+            // value from the JSON body rather than poking it into $_REQUEST.
             $jsonToken = isset($payload['sectok']) ? (string) $payload['sectok'] : '';
-            if ($jsonToken !== '' && !isset($_REQUEST['sectok'])) {
-                $_POST['sectok']    = $jsonToken;
-                $_REQUEST['sectok'] = $jsonToken;
-            }
-            if (!checkSecurityToken()) {
+            if (!checkSecurityToken($jsonToken)) {
                 $this->sendError('Invalid security token.');
                 return;
             }
@@ -227,16 +225,9 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
         }
 
         // Gather facts once; pass them to the helper's permission methods.
-        global $USERINFO;
-        $user    = (string) ($_SERVER['REMOTE_USER'] ?? '');
-        $isAdmin = (bool) ($USERINFO['grps'] ?? false)
-            ? in_array('admin', (array) ($USERINFO['grps'] ?? []), true)
-            : false;
-        // also honour DokuWiki's own admin flag
-        if (!$isAdmin) {
-            global $INFO;
-            $isAdmin = !empty($INFO['isadmin']);
-        }
+        global $INPUT;
+        $user     = $INPUT->server->str('REMOTE_USER');
+        $isAdmin  = auth_isadmin();
         $aclLevel = auth_quickaclcheck($id);
 
         // Route to the correct handler method.
@@ -624,18 +615,29 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
      */
     protected function readPayload()
     {
-        $ct = $_SERVER['CONTENT_TYPE'] ?? '';
+        global $INPUT;
+        $ct = $INPUT->server->str('CONTENT_TYPE');
         if (strpos($ct, 'application/json') !== false) {
-            $raw  = file_get_contents('php://input');
-            $data = json_decode($raw, true);
+            $data = json_decode(file_get_contents('php://input'), true);
             return is_array($data) ? $data : null;
         }
-        // For GET requests (load action), read from query string.
-        if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-            return $_GET ? (array) $_GET : [];
+        // The read-only 'load' action is a GET carrying action + id only.
+        if ($INPUT->server->str('REQUEST_METHOD') === 'GET') {
+            return [
+                'action' => $INPUT->get->str('action'),
+                'id'     => $INPUT->get->str('id'),
+            ];
         }
-        // Fall back to form-encoded POST (useful for simple curl tests).
-        return $_POST ? (array) $_POST : [];
+        // Form-encoded POST fallback (handy for simple curl tests).
+        return [
+            'action'  => $INPUT->post->str('action'),
+            'id'      => $INPUT->post->str('id'),
+            'sectok'  => $INPUT->post->str('sectok'),
+            'annId'   => $INPUT->post->str('annId'),
+            'replyId' => $INPUT->post->str('replyId'),
+            'body'    => $INPUT->post->str('body'),
+            'status'  => $INPUT->post->str('status'),
+        ];
     }
 
     /**
@@ -665,7 +667,7 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
      */
     protected function sendSuccess(array $extra = [])
     {
-        echo json_encode(array_merge(['success' => true], $extra), JSON_PRETTY_PRINT);
+        echo json_encode(array_merge(['success' => true], $extra), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -675,6 +677,6 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
      */
     protected function sendError($message)
     {
-        echo json_encode(['success' => false, 'error' => $message], JSON_PRETTY_PRINT);
+        echo json_encode(['success' => false, 'error' => $message], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
     }
 }
