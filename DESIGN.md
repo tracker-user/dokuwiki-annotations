@@ -25,11 +25,15 @@ Hypothes.is and `ep_comments_page`:
 
 | File | Owns |
 |------|------|
+| `plugin.info.txt` | Manifest: name, author, version date, description, repository URL. |
 | `helper.php` | The per-page store, all CRUD, server-side orphan detection, and the **permission rules as the single source of truth**. Pure logic — permission methods take facts (user, admin flag, ACL level) as parameters and read no globals. |
 | `action.php` | Event registration; injecting the page payload into `JSINFO`; the AJAX endpoint and **permission enforcement** (gathers facts from DokuWiki globals, calls the helper). |
 | `script.js` | All front-end behaviour: boot/gate, load + re-anchor, highlights, gutter markers, counter, selection→new-annotation flow, thread panels, and AJAX. Plain IIFE, vanilla JS. |
 | `style.css` | Styling via DokuWiki theme tokens (`__background__`, `__text__`, …). Only the amber (open) / green (resolved) highlight colours are hard-coded. |
 | `lang/en/lang.php` | The usersettings toggle label/description (used) plus a set of UI strings that are **not yet wired into the JS** — see *Known gaps*. |
+
+Documentation lives in [`README.md`](README.md) (end users) and this file
+(developers); the licence is in `LICENSE` (GPL 2).
 
 ## Data model & storage
 
