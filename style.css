@@ -7,34 +7,52 @@
  *
  * FF78 ESR safe: no :has(), :not() with selectors, aspect-ratio, container
  * queries, or CSS nesting.
+ *
+ * The two highlight hues are driven by CSS custom properties that action.php
+ * injects from the color_open / color_resolved config (as "r,g,b" triplets);
+ * every fill/border/marker/pill tint below is that hue at a different opacity.
+ * The :root fallbacks here keep the built-in amber/green palette when the
+ * injected <style> is absent (e.g. annotations off, or a stripped template).
+ *
+ * NOTE: every rgba() that contains var() is LESS-escaped as ~"rgba(var(…), a)".
+ * DokuWiki compiles plugin CSS through lesserphp, which otherwise evaluates
+ * rgba() at compile time, reads var() as 0, and bakes the colour to #000000.
+ * The escape makes lesserphp emit the declaration verbatim so the browser
+ * resolves the custom property at render time. Keep new var()-based colours
+ * escaped the same way.
  */
+
+:root {
+    --ann-open-rgb: var(--ann-open-rgb);     /* amber — open / unresolved */
+    --ann-resolved-rgb: var(--ann-resolved-rgb); /* green — resolved */
+}
 
 /* =========================================================================
    Highlight spans
    ========================================================================= */
 
 .ann-highlight-open {
-    background-color: rgba(251, 191, 36, 0.35);   /* amber-300 @ 35% */
-    border-bottom: 2px solid rgba(245, 158, 11, 0.7);
+    background-color: ~"rgba(var(--ann-open-rgb), 0.35)";   /* amber-300 @ 35% */
+    border-bottom: 2px solid ~"rgba(var(--ann-open-rgb), 0.7)";
     border-radius: 2px;
     cursor: pointer;
     transition: background-color 0.15s ease;
 }
 
 .ann-highlight-open:hover {
-    background-color: rgba(251, 191, 36, 0.55);
+    background-color: ~"rgba(var(--ann-open-rgb), 0.55)";
 }
 
 .ann-highlight-resolved {
-    background-color: rgba(134, 239, 172, 0.30);  /* green-300 @ 30% */
-    border-bottom: 2px solid rgba(74, 222, 128, 0.6);
+    background-color: ~"rgba(var(--ann-resolved-rgb), 0.30)";  /* green-300 @ 30% */
+    border-bottom: 2px solid ~"rgba(var(--ann-resolved-rgb), 0.6)";
     border-radius: 2px;
     cursor: pointer;
     transition: background-color 0.15s ease;
 }
 
 .ann-highlight-resolved:hover {
-    background-color: rgba(134, 239, 172, 0.50);
+    background-color: ~"rgba(var(--ann-resolved-rgb), 0.50)";
 }
 
 /* =========================================================================
@@ -74,7 +92,7 @@
     padding: 0;
     border: none;
     background: none;
-    color: rgba(245, 158, 11, 0.8); /* amber — open */
+    color: ~"rgba(var(--ann-open-rgb), 0.8)"; /* amber — open */
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -93,15 +111,15 @@
 }
 
 .ann-gutter-marker:hover {
-    color: rgba(245, 158, 11, 1);
+    color: ~"rgba(var(--ann-open-rgb), 1)";
 }
 
 .ann-gutter-marker[data-status="resolved"] {
-    color: rgba(74, 222, 128, 0.8); /* green — resolved */
+    color: ~"rgba(var(--ann-resolved-rgb), 0.8)"; /* green — resolved */
 }
 
 .ann-gutter-marker[data-status="resolved"]:hover {
-    color: rgba(74, 222, 128, 1);
+    color: ~"rgba(var(--ann-resolved-rgb), 1)";
 }
 
 /* =========================================================================
@@ -111,7 +129,7 @@
 .ann-panel {
     margin: 0.75em 0 1em;
     border: 1px solid __border__;
-    border-left: 3px solid rgba(245, 158, 11, 0.7);
+    border-left: 3px solid ~"rgba(var(--ann-open-rgb), 0.7)";
     background: __background_alt__;
     box-shadow: 0 2px 8px rgba(0,0,0,0.10);
     contain: layout;
@@ -188,15 +206,15 @@
 }
 
 .ann-status-open {
-    background: rgba(251, 191, 36, 0.25);
+    background: ~"rgba(var(--ann-open-rgb), 0.25)";
     color: #92400e;
-    border: 1px solid rgba(245, 158, 11, 0.5);
+    border: 1px solid ~"rgba(var(--ann-open-rgb), 0.5)";
 }
 
 .ann-status-resolved {
-    background: rgba(134, 239, 172, 0.25);
+    background: ~"rgba(var(--ann-resolved-rgb), 0.25)";
     color: #166534;
-    border: 1px solid rgba(74, 222, 128, 0.4);
+    border: 1px solid ~"rgba(var(--ann-resolved-rgb), 0.4)";
 }
 
 /* =========================================================================
@@ -213,11 +231,11 @@
 .ann-quote {
     margin-bottom: 0.65em;
     padding: 0.25em 0.6em;
-    border-left: 3px solid rgba(245, 158, 11, 0.6);
+    border-left: 3px solid ~"rgba(var(--ann-open-rgb), 0.6)";
     color: __text__;
     font-style: italic;
     font-size: 0.9em;
-    background: rgba(251, 191, 36, 0.08);
+    background: ~"rgba(var(--ann-open-rgb), 0.08)";
     border-radius: 0 2px 2px 0;
 }
 
@@ -361,7 +379,7 @@
 .ann-new-form {
     margin: 0.75em 0 1em;
     border: 1px solid __border__;
-    border-left: 3px solid rgba(245, 158, 11, 0.7);
+    border-left: 3px solid ~"rgba(var(--ann-open-rgb), 0.7)";
     background: __background_alt__;
     contain: layout;
 }
@@ -403,6 +421,14 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
+/* Static amber glow drawing the eye to the freshly-revealed "Annotate" button.
+   The rgba() is LESS-escaped (~"…") so DokuWiki's CSS compiler passes it through
+   verbatim instead of evaluating var() to black; the browser resolves the
+   custom property at render time. FF78 ESR safe. */
+.ann-tooltip .ann-btn {
+    box-shadow: 0 0 8px 2px ~"rgba(var(--ann-open-rgb), 0.45)", 0 1px 4px rgba(0,0,0,0.25);
+}
+
 /* =========================================================================
    Orphan drawer
    ========================================================================= */
@@ -433,5 +459,5 @@
    ========================================================================= */
 
 .ann-panel[data-status="resolved"] {
-    border-left-color: rgba(74, 222, 128, 0.6);
+    border-left-color: ~"rgba(var(--ann-resolved-rgb), 0.6)";
 }

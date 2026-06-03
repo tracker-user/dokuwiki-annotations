@@ -352,19 +352,49 @@
     }
 
     /**
-     * True if the given node is inside an existing highlight span.
-     * Used to block opening a new-annotation tooltip on already-annotated text.
+     * The first existing highlight span the given range overlaps, or null.
+     * Used to redirect a selection that touches an annotation into opening it,
+     * rather than offering to create a new (overlapping) one. intersectsNode is
+     * supported in Firefox 78 ESR.
+     *
+     * @param {Range} range
+     * @returns {HTMLElement|null}
+     */
+    function selectionHitsHighlight(range) {
+        var spans = document.querySelectorAll(
+            '.' + CLS_HIGHLIGHT_OPEN + ', .' + CLS_HIGHLIGHT_RESOLVED
+        );
+        for (var i = 0; i < spans.length; i++) {
+            if (range.intersectsNode(spans[i])) {
+                return spans[i];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * True if the node sits in a region that must never receive a new
+     * annotation: our own annotation UI (panels, counter bar, tooltip,
+     * highlights), the table of contents (#dw__toc), the page-info line
+     * (.docInfo), or a section-edit button (.secedit). These all live inside
+     * #dokuwiki__content, so plain containment is not enough to gate selection.
      *
      * @param {Node} node
      * @returns {bool}
      */
-    function isInsideHighlight(node) {
+    function isInExcludedRegion(node) {
         var el = (node && node.nodeType === 1) ? node : (node ? node.parentNode : null);
         while (el && el !== document.body) {
-            if (el.className &&
-                (el.className.indexOf(CLS_HIGHLIGHT_OPEN)     !== -1 ||
-                 el.className.indexOf(CLS_HIGHLIGHT_RESOLVED) !== -1)) {
-                return true;
+            if (el.nodeType === 1) {
+                var cls = el.className;
+                if (typeof cls === 'string') {
+                    if (cls.indexOf('ann-') !== -1 ||  // our own UI + highlights
+                        cls.indexOf('docInfo') !== -1 ||
+                        cls.indexOf('secedit') !== -1) {
+                        return true;
+                    }
+                }
+                if (el.id === 'dw__toc') return true;
             }
             el = el.parentNode;
         }
@@ -1373,8 +1403,21 @@
             hideTooltip();
             return;
         }
-        // Don't open a new annotation when the selection overlaps existing annotated text.
-        if (isInsideHighlight(range.startContainer) || isInsideHighlight(range.endContainer)) {
+        // If the selection touches any existing annotation — even by a single
+        // character, whether wholly inside it or overrunning it on either side —
+        // open that annotation instead of offering to create a new one.
+        var hitSpan = selectionHitsHighlight(range);
+        if (hitSpan) {
+            hideTooltip();
+            openPanel(hitSpan.dataset.annId);
+            return;
+        }
+        // Only real page prose can be annotated: skip our own UI (panels,
+        // counter, tooltip), the TOC, the page-info line, and section-edit
+        // buttons — all of which live inside #dokuwiki__content.
+        if (isInExcludedRegion(range.startContainer) ||
+            isInExcludedRegion(range.endContainer) ||
+            isInExcludedRegion(range.commonAncestorContainer)) {
             hideTooltip();
             return;
         }
@@ -1493,7 +1536,10 @@
             }
         }
 
-        var CTX = 30;
+        // Context slice length comes from the plugin config (context_length),
+        // injected into JSINFO.annotations; fall back to 30 when absent. The
+        // PHP side caps the stored prefix/suffix to the same length.
+        var CTX = (typeof _info.contextLen === 'number') ? _info.contextLen : 30;
         var prefix = fullNorm.slice(Math.max(0, normStart - CTX), normStart);
         var suffix = fullNorm.slice(normStart + exact.length, normStart + exact.length + CTX);
 

@@ -30,7 +30,7 @@ Hypothes.is and `ep_comments_page`:
 | `helper.php` | The per-page store, all CRUD, server-side orphan detection, and the **permission rules as the single source of truth**. Pure logic — permission methods take facts (user, admin flag, ACL level) as parameters and read no globals. |
 | `action.php` | Event registration; injecting the page payload into `JSINFO`; the AJAX endpoint and **permission enforcement** (gathers facts from DokuWiki globals, calls the helper). |
 | `script.js` | All front-end behaviour: boot/gate, load + re-anchor, highlights, gutter markers, counter, selection→new-annotation flow, thread panels, and AJAX. Plain IIFE, vanilla JS. |
-| `style.css` | Styling via DokuWiki theme tokens (`__background__`, `__text__`, …). Only the amber (open) / green (resolved) highlight colours are hard-coded. |
+| `style.css` | Styling via DokuWiki theme tokens (`__background__`, `__text__`, …). The amber (open) / green (resolved) highlight hues come from the `--ann-open-rgb` / `--ann-resolved-rgb` custom properties that `action.php` injects from config (with `:root` fallbacks here). |
 | `lang/<iso>/lang.php` | The usersettings toggle label/description (PHP side) plus the front-end UI strings under `$lang['js']`, exposed to `script.js` as `LANG.plugins.annotations`. Ships `en`, `de`, `ru`, `ja`. |
 
 Documentation lives in [`README.md`](README.md) (end users) and this file
@@ -76,8 +76,10 @@ thread (`buildReplyTree`). The `reply`, `edit_reply` and `delete_reply` actions
 return the **full updated annotation**, so the panel re-renders the whole thread
 in a single round-trip.
 
-Limits and identifiers (`helper.php` constants): `SCHEMA_VERSION = 1`,
-`MAX_QUOTE = 1000`, `MAX_CONTEXT = 64`, `MAX_BODY = 10000`. IDs are
+Limits and identifiers: `SCHEMA_VERSION = 1` and `MAX_QUOTE = 1000` are
+`helper.php` constants; the context-slice length and body cap are now config
+(`context_length`, `body_cap`, defaulting to 64 and 10000 via the
+`DEFAULT_CONTEXT` / `DEFAULT_BODY` fallbacks). IDs are
 `bin2hex(random_bytes(8))` — 16 hex chars. Writes go through `io_lock()` →
 modify → `io_saveFile()` → `io_unlock()` (the `mutate()` helper); a modifier
 returning `false` aborts the write (used for "target not found").
@@ -139,7 +141,8 @@ The optional `annotations` key carries the page's **full annotation list**, so
 DokuWiki — ~300 ms — only to re-read this same file). `handleMetaHeader` reads
 the list once and derives `stats` from it via `helper::statsFor()` rather than
 re-reading through `getStats()`. The key is omitted when the feature is off for
-the user, or when the serialized list exceeds `EMBED_MAX_BYTES` (128 KB) — in
+the user, or when the serialized list exceeds the `embed_max_bytes` config
+(default 128 KB; `DEFAULT_EMBED_MAX_BYTES` is the fallback) — in
 which case `script.js` falls back to the `load` endpoint. Because the inline
 `JSINFO` script is regenerated every request (it is not in the parser page
 cache), the embedded list is always current.
@@ -225,13 +228,10 @@ All actions also take the page `id`.
   `composer run test -- --group plugin_annotations`.
 - **Cleanup — done.** The unused `ann-highlight-orphaned` constant is gone, and
   the panel sets `data-status` so the resolved accent in `style.css` applies.
-
-## Known gaps / next steps
-
-- **Config.** Still no `conf/` — highlight colours, context length and body cap
-  are constants/CSS. `GeneralTest::testPluginConf` already guards the
-  `default.php`↔`metadata.php` invariant should config be added.
-- **JS cachebuster.** The front-end bundle is keyed by config-file mtimes, not
-  plugin-file mtimes, so after editing `script.js` / `lang` you must bump a main
-  config file (saving any config option does this) for browsers to pull the new
-  bundle.
+- **Config — done.** `conf/default.php` + `conf/metadata.php` expose
+  `color_open`, `color_resolved`, `embed_max_bytes`, `context_length` and
+  `body_cap` (labels in `lang/<iso>/settings.php`). The two colours are injected
+  as CSS custom properties (`--ann-open-rgb` / `--ann-resolved-rgb`) by
+  `action.php::injectColourVars()`; `style.css` derives every opacity variant
+  from them and ships `:root` fallbacks. `GeneralTest::testPluginConf` enforces
+  the `default.php`↔`metadata.php` invariant.

@@ -25,7 +25,19 @@ Works in current browsers and as far back as Firefox 78 ESR.
 
 1. Copy the `annotations/` directory into `{DokuWiki}/lib/plugins/`.
 2. If you want the per-user toggle, install the usersettings plugin too.
-3. No additional configuration is required.
+3. The defaults work out of the box; tune them in the Configuration Manager if you like (see below).
+
+## Configuration
+
+All settings live under **Admin → Configuration Settings → annotations**:
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `color_open` | `#f59e0b` | Highlight colour for open (unresolved) annotations. One hex value; lighter fills, gutter markers and status-pill tints are derived from it automatically. |
+| `color_resolved` | `#4ade80` | Highlight colour for resolved annotations. |
+| `embed_max_bytes` | `131072` | Largest annotation list (bytes) shipped inline with the page. Bigger lists load via a separate AJAX request instead, keeping every page view lean. |
+| `context_length` | `64` | Characters of surrounding text stored on each side of a quote, used to re-locate it after edits and to disambiguate repeated quotes. `0` disables context. |
+| `body_cap` | `10000` | Maximum length (characters) of an annotation or reply body; longer input is truncated. |
 
 ## Usage
 
@@ -42,6 +54,8 @@ The counter bar above the page content shows how many annotations the page has. 
 3. Type your comment and click **Annotate** to save.
 
 > You only need to be logged in and able to *read* the page — edit access is **not** required. If you can read a page, you can annotate it.
+
+The **Annotate** button only appears over real page prose. Selecting inside the table of contents, the page-info line, section-edit buttons, or the annotation panels does nothing. If your selection touches an existing annotation — even by a single character — that annotation opens instead of starting a new, overlapping one.
 
 ### Replying
 

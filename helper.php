@@ -41,11 +41,33 @@ class helper_plugin_annotations extends DokuWiki_Plugin
     /** longest quoted selection stored, in characters */
     const MAX_QUOTE = 1000;
 
-    /** length of the prefix/suffix context slices, in characters */
-    const MAX_CONTEXT = 64;
+    /** length of the prefix/suffix context slices, in characters (config fallback) */
+    const DEFAULT_CONTEXT = 64;
 
-    /** longest annotation/reply body, in characters */
-    const MAX_BODY = 10000;
+    /** longest annotation/reply body, in characters (config fallback) */
+    const DEFAULT_BODY = 10000;
+
+    /**
+     * Configured length of each prefix/suffix context slice, in characters.
+     *
+     * @return int
+     */
+    protected function contextLength()
+    {
+        $v = (int) $this->getConf('context_length');
+        return $v >= 0 ? $v : self::DEFAULT_CONTEXT;
+    }
+
+    /**
+     * Configured maximum annotation/reply body length, in characters.
+     *
+     * @return int
+     */
+    protected function bodyCap()
+    {
+        $v = (int) $this->getConf('body_cap');
+        return $v > 0 ? $v : self::DEFAULT_BODY;
+    }
 
     // ---------------------------------------------------------------------
     //  Storage
@@ -612,11 +634,12 @@ class helper_plugin_annotations extends DokuWiki_Plugin
         $suffix = (isset($anchor['suffix']) && is_string($anchor['suffix']))
             ? $this->normalizeWhitespace($anchor['suffix'])
             : '';
-        if (mb_strlen($prefix) > self::MAX_CONTEXT) {
-            $prefix = mb_substr($prefix, -self::MAX_CONTEXT);
+        $ctx = $this->contextLength();
+        if (mb_strlen($prefix) > $ctx) {
+            $prefix = mb_substr($prefix, -$ctx);
         }
-        if (mb_strlen($suffix) > self::MAX_CONTEXT) {
-            $suffix = mb_substr($suffix, 0, self::MAX_CONTEXT);
+        if (mb_strlen($suffix) > $ctx) {
+            $suffix = mb_substr($suffix, 0, $ctx);
         }
 
         $start = isset($anchor['start']) ? max(0, (int) $anchor['start']) : 0;
@@ -645,8 +668,9 @@ class helper_plugin_annotations extends DokuWiki_Plugin
         $body = str_replace("\r\n", "\n", $body);
         $body = str_replace("\r", "\n", $body);
         $body = trim($body);
-        if (mb_strlen($body) > self::MAX_BODY) {
-            $body = mb_substr($body, 0, self::MAX_BODY);
+        $cap = $this->bodyCap();
+        if (mb_strlen($body) > $cap) {
+            $body = mb_substr($body, 0, $cap);
         }
         return $body;
     }

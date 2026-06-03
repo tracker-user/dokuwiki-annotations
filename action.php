@@ -40,14 +40,14 @@ if (!defined('DOKU_INC')) die();
 class action_plugin_annotations extends DokuWiki_Action_Plugin
 {
     /**
-     * Largest serialized annotation list (bytes) embedded inline in the page.
-     * Below this, the list ships with the page so script.js renders without a
-     * second bootstrapped AJAX round-trip; above it, the client falls back to
-     * the GET 'load' endpoint so a heavily-annotated page can't bloat every
-     * view. A body is capped at MAX_BODY (10 000), so 128 KB comfortably holds
-     * dozens of typical threads.
+     * Fallback for the largest serialized annotation list (bytes) embedded
+     * inline in the page when the config value is unreadable. Below this, the
+     * list ships with the page so script.js renders without a second
+     * bootstrapped AJAX round-trip; above it, the client falls back to the GET
+     * 'load' endpoint so a heavily-annotated page can't bloat every view. The
+     * live value is the 'embed_max_bytes' config setting.
      */
-    const EMBED_MAX_BYTES = 131072;
+    const DEFAULT_EMBED_MAX_BYTES = 131072;
 
     // ------------------------------------------------------------------
     //  Event registration
@@ -158,21 +158,30 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
         $isAdmin = auth_isadmin();
 
         $data = [
-            'enabled' => $enabled,
-            'pageId'  => $ID,
-            'stats'   => $stats,
-            'user'    => $user,
-            'isAdmin' => $isAdmin,
-            'token'   => getSecurityToken(),  // CSRF token for AJAX POSTs
+            'enabled'    => $enabled,
+            'pageId'     => $ID,
+            'stats'      => $stats,
+            'user'       => $user,
+            'isAdmin'    => $isAdmin,
+            'token'      => getSecurityToken(),  // CSRF token for AJAX POSTs
+            'contextLen' => max(0, (int) $this->getConf('context_length')),
         ];
+
+        // Inject the configurable highlight colours as CSS custom properties so
+        // style.css can derive every opacity variant from one hex per state.
+        $this->injectColourVars($event);
 
         // Embed the full list only when the feature is on for this user and the
         // serialized list is small enough; otherwise script.js fetches it via
         // the GET 'load' endpoint. The inline JSINFO script is regenerated every
         // request (it is not part of the parser page cache), so this stays fresh.
         if ($enabled) {
+            $embedMax = (int) $this->getConf('embed_max_bytes');
+            if ($embedMax <= 0) {
+                $embedMax = self::DEFAULT_EMBED_MAX_BYTES;
+            }
             $listJson = json_encode($annotations, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-            if ($listJson !== false && strlen($listJson) <= self::EMBED_MAX_BYTES) {
+            if ($listJson !== false && strlen($listJson) <= $embedMax) {
                 $data['annotations'] = $annotations;
             }
         }
@@ -194,6 +203,41 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
             }
             unset($scriptTag);
         }
+    }
+
+    /**
+     * Append a <style> metaheader declaring the two configurable highlight
+     * colours as CSS custom properties (--ann-open-rgb / --ann-resolved-rgb,
+     * each an "r,g,b" channel triplet). style.css consumes them via
+     * rgba(var(--ann-open-rgb), <alpha>) so a single hex per state drives every
+     * fill/border/marker/pill tint. style.css also ships :root fallbacks, so an
+     * unreadable colour just keeps the built-in palette.
+     *
+     * @param Doku_Event $event TPL_METAHEADER_OUTPUT
+     */
+    protected function injectColourVars(Doku_Event $event)
+    {
+        $open     = $this->hexToRgb($this->getConf('color_open'), '245,158,11');
+        $resolved = $this->hexToRgb($this->getConf('color_resolved'), '74,222,128');
+        $css = ':root{--ann-open-rgb:' . $open . ';--ann-resolved-rgb:' . $resolved . ';}';
+        $event->data['style'][] = ['type' => 'text/css', '_data' => $css];
+    }
+
+    /**
+     * Convert a #rrggbb hex colour to an "r,g,b" channel triplet, returning the
+     * supplied fallback for anything that is not a valid 6-digit hex colour.
+     *
+     * @param mixed  $hex
+     * @param string $fallback "r,g,b" used when $hex is invalid
+     * @return string
+     */
+    protected function hexToRgb($hex, $fallback)
+    {
+        if (is_string($hex) && preg_match('/^#([0-9a-fA-F]{6})$/', $hex, $m)) {
+            $int = hexdec($m[1]);
+            return (($int >> 16) & 255) . ',' . (($int >> 8) & 255) . ',' . ($int & 255);
+        }
+        return $fallback;
     }
 
     // ------------------------------------------------------------------

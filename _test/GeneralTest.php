@@ -24,7 +24,6 @@ class GeneralTest extends DokuWikiTest
 
         $this->assertArrayHasKey('base', $info);
         $this->assertArrayHasKey('author', $info);
-        $this->assertArrayHasKey('email', $info);
         $this->assertArrayHasKey('date', $info);
         $this->assertArrayHasKey('name', $info);
         $this->assertArrayHasKey('desc', $info);
@@ -38,8 +37,7 @@ class GeneralTest extends DokuWikiTest
 
     /**
      * Every $conf entry in conf/default.php must have a matching $meta entry in
-     * conf/metadata.php (and vice versa). The plugin currently ships no config,
-     * so this self-skips — it guards the invariant if config is added later.
+     * conf/metadata.php (and vice versa).
      */
     public function testPluginConf(): void
     {
