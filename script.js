@@ -136,6 +136,11 @@
         // Keep gutter markers aligned with their highlights when the viewport
         // width changes: both the .page column and the highlights reflow.
         window.addEventListener('resize', repositionMarkers);
+
+        // Annotations now render at DOMContentLoaded (the list ships inline),
+        // so late-loading images/web fonts can still shift the layout under the
+        // already-placed markers. Re-align them once everything has loaded.
+        window.addEventListener('load', repositionMarkers);
     }
 
     // -----------------------------------------------------------------------
@@ -164,11 +169,21 @@
     // -----------------------------------------------------------------------
 
     /**
-     * Fetch all annotations for the current page and render them.
+     * Load all annotations for the current page and render them.
+     *
+     * Fast path: action.php normally ships the list inline with the page (in
+     * JSINFO.annotations.annotations), so we render straight away with no
+     * round-trip. Only heavily-annotated pages omit the inline list, in which
+     * case we fall back to the GET 'load' endpoint.
      */
     function loadAnnotations() {
-        // We use a lightweight GET-style call: the action.php AJAX handler
-        // is POST-only, so we pass action=load in the payload.
+        if (Array.isArray(_info.annotations)) {
+            ingestAnnotations(_info.annotations);
+            return;
+        }
+
+        // Fallback: the inline list was too large to embed. Fetch it instead.
+        // action.php's AJAX handler accepts action=load as a GET query.
         fetch(AJAX_URL + '&action=load&id=' + encodeURIComponent(_info.pageId), {
             method: 'GET',
         }).then(function (res) {
@@ -177,13 +192,22 @@
             if (!data || !Array.isArray(data.annotations)) {
                 return;
             }
-            data.annotations.forEach(function (ann) {
-                _annotations.set(ann.id, ann);
-            });
-            renderAll();
+            ingestAnnotations(data.annotations);
         }).catch(function () {
             // Graceful degradation: page still works without annotations.
         });
+    }
+
+    /**
+     * Store a loaded annotation list (inline or fetched) and render everything.
+     *
+     * @param {Array} list  annotation objects from the server
+     */
+    function ingestAnnotations(list) {
+        list.forEach(function (ann) {
+            _annotations.set(ann.id, ann);
+        });
+        renderAll();
     }
 
     /**
@@ -1034,7 +1058,7 @@
         var ta = document.createElement('textarea');
         ta.className = 'ann-body-input';
         ta.placeholder = t('placeholder_reply', 'Write a reply…');
-        ta.rows = 2;
+        ta.rows = 3;
         form.appendChild(ta);
 
         var row = document.createElement('div');
@@ -1157,7 +1181,7 @@
         var ta = document.createElement('textarea');
         ta.className = 'ann-body-input';
         ta.value = data.body || '';
-        ta.rows  = 3;
+        ta.rows = 3;
 
         var row = document.createElement('div');
         row.className = 'ann-form-row';

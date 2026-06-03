@@ -39,6 +39,16 @@ if (!defined('DOKU_INC')) die();
 
 class action_plugin_annotations extends DokuWiki_Action_Plugin
 {
+    /**
+     * Largest serialized annotation list (bytes) embedded inline in the page.
+     * Below this, the list ships with the page so script.js renders without a
+     * second bootstrapped AJAX round-trip; above it, the client falls back to
+     * the GET 'load' endpoint so a heavily-annotated page can't bloat every
+     * view. A body is capped at MAX_BODY (10 000), so 128 KB comfortably holds
+     * dozens of typical threads.
+     */
+    const EMBED_MAX_BYTES = 131072;
+
     // ------------------------------------------------------------------
     //  Event registration
     // ------------------------------------------------------------------
@@ -133,21 +143,41 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
         global $INPUT;
 
         $enabled = $this->isEnabledForUser();
-        $stats   = $helper->getStats($ID);
+
+        // Read the annotation list once here and ship it inline with the page
+        // (see EMBED_MAX_BYTES). script.js then renders immediately instead of
+        // firing a second AJAX request that re-boots DokuWiki (~300 ms) just to
+        // re-read this same file. Stats are derived from the loaded list rather
+        // than calling getStats(), which would read the file a second time.
+        $annotations = $helper->getAnnotations($ID);
+        $stats       = $helper->statsFor($annotations);
 
         // DokuWiki's jsinfo() does not expose user identity, so we inject it
         // here. JS uses these to gate the selection tooltip and permission UI.
         $user    = $INPUT->server->str('REMOTE_USER');
         $isAdmin = auth_isadmin();
 
-        $payload = json_encode([
+        $data = [
             'enabled' => $enabled,
             'pageId'  => $ID,
             'stats'   => $stats,
             'user'    => $user,
             'isAdmin' => $isAdmin,
             'token'   => getSecurityToken(),  // CSRF token for AJAX POSTs
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        ];
+
+        // Embed the full list only when the feature is on for this user and the
+        // serialized list is small enough; otherwise script.js fetches it via
+        // the GET 'load' endpoint. The inline JSINFO script is regenerated every
+        // request (it is not part of the parser page cache), so this stays fresh.
+        if ($enabled) {
+            $listJson = json_encode($annotations, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            if ($listJson !== false && strlen($listJson) <= self::EMBED_MAX_BYTES) {
+                $data['annotations'] = $annotations;
+            }
+        }
+
+        $payload = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         // The inline script block containing "var JSINFO = ...;" is in
         // $event->data['script']. Find it and append our assignment so it

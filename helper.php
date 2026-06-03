@@ -111,9 +111,23 @@ class helper_plugin_annotations extends DokuWiki_Plugin
      */
     public function getStats($id)
     {
+        return $this->statsFor($this->getAnnotations($id));
+    }
+
+    /**
+     * Counts for the on-page indicator, computed from an already-loaded list.
+     * Split out from getStats() so callers that already hold the annotation
+     * array (e.g. the page-load JSINFO injector, which embeds the same list)
+     * don't re-read the file.
+     *
+     * @param array $annotations annotation list
+     * @return array ['total'=>int, 'open'=>int, 'resolved'=>int]
+     */
+    public function statsFor(array $annotations)
+    {
         $open = 0;
         $resolved = 0;
-        foreach ($this->getAnnotations($id) as $a) {
+        foreach ($annotations as $a) {
             if (($a['status'] ?? 'open') === 'resolved') {
                 $resolved++;
             } else {

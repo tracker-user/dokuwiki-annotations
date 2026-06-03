@@ -126,12 +126,23 @@ finds that inline `<script>` in `$event->data['script']` and appends a
 `JSINFO.annotations = {…};` statement so it runs in the same scope. Injection is
 gated to `show` / `export_xhtml` views.
 
-Payload: `{ enabled, pageId, stats, user, isAdmin, token }`. `user`, `isAdmin`
-and `token` are included because stock `JSINFO` exposes no user identity and no
-security token — the script reads them from `JSINFO.annotations`, not from
-`JSINFO.userinfo` (which does not exist) or the `#dw__token` field. UI strings
-are **not** in this payload: they travel through DokuWiki's per-plugin JS lang
-bundle, `LANG.plugins.annotations`, built from `$lang['js']`.
+Payload: `{ enabled, pageId, stats, user, isAdmin, token, annotations? }`.
+`user`, `isAdmin` and `token` are included because stock `JSINFO` exposes no
+user identity and no security token — the script reads them from
+`JSINFO.annotations`, not from `JSINFO.userinfo` (which does not exist) or the
+`#dw__token` field. UI strings are **not** in this payload: they travel through
+DokuWiki's per-plugin JS lang bundle, `LANG.plugins.annotations`, built from
+`$lang['js']`.
+
+The optional `annotations` key carries the page's **full annotation list**, so
+`script.js` renders on boot with no `load` round-trip (that AJAX call re-boots
+DokuWiki — ~300 ms — only to re-read this same file). `handleMetaHeader` reads
+the list once and derives `stats` from it via `helper::statsFor()` rather than
+re-reading through `getStats()`. The key is omitted when the feature is off for
+the user, or when the serialized list exceeds `EMBED_MAX_BYTES` (128 KB) — in
+which case `script.js` falls back to the `load` endpoint. Because the inline
+`JSINFO` script is regenerated every request (it is not in the parser page
+cache), the embedded list is always current.
 
 ## Per-user toggle
 
@@ -173,7 +184,9 @@ calls them. `isAdmin` is DokuWiki's `auth_isadmin()` (superuser / admin group).
 `…/lib/exe/ajax.php?call=annotations` (handled on `AJAX_CALL_UNKNOWN`). The
 `load` action is a GET with query params; everything else is `POST` with an
 `application/json` body. Every response is `{ "success": true, … }` or
-`{ "success": false, "error": "…" }`.
+`{ "success": false, "error": "…" }`. `load` is now only a **fallback** for the
+inline-embedded list (see JSINFO injection above); the mutating actions are the
+hot path.
 
 | Action | Method | Token | Extra fields |
 |--------|--------|-------|--------------|
