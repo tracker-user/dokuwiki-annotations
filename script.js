@@ -678,7 +678,7 @@
                 btnCR.type = 'button';
                 btnCR.className = 'ann-btn ann-btn-admin';
                 btnCR.textContent = t('btn_clear_resolved', 'Clear resolved');
-                btnCR.addEventListener('click', doClearResolved);
+                btnCR.addEventListener('click', function () { doClearResolved(btnCR); });
                 bar.appendChild(btnCR);
             }
             if (orphanCount > 0) {
@@ -686,7 +686,7 @@
                 btnCO.type = 'button';
                 btnCO.className = 'ann-btn ann-btn-admin';
                 btnCO.textContent = t('btn_clear_orphaned', 'Clear orphaned');
-                btnCO.addEventListener('click', doClearOrphaned);
+                btnCO.addEventListener('click', function () { doClearOrphaned(btnCO); });
                 bar.appendChild(btnCO);
             }
         }
@@ -1236,6 +1236,31 @@
     }
 
     /**
+     * Keep the orphan drawer in step with the current orphan set after a
+     * mutation (delete / clear). No-op when the drawer is closed. When it is
+     * open, rebuild it from the live _orphaned flags so deleted entries
+     * disappear; if no orphans remain, remove the drawer entirely instead of
+     * leaving an empty shell behind.
+     *
+     * Must run after renderAll(), which recomputes every ann._orphaned flag.
+     */
+    function syncOrphanDrawer() {
+        var drawer = document.getElementById('ann-orphan-drawer');
+        if (!drawer) return; // drawer not open — nothing to do
+
+        var hasOrphans = false;
+        _annotations.forEach(function (ann) {
+            if (ann._orphaned) hasOrphans = true;
+        });
+
+        if (drawer.parentNode) drawer.parentNode.removeChild(drawer);
+        if (hasOrphans) {
+            renderOrphanDrawer();
+            repositionMarkers();
+        }
+    }
+
+    /**
      * Build and insert the orphan drawer at the bottom of the content area.
      */
     function renderOrphanDrawer() {
@@ -1683,6 +1708,9 @@
             _annotations.delete(annId);
             closePanel();
             renderAll();
+            // If this was deleted from the open orphan drawer, refresh it —
+            // and remove it entirely once the last orphan is gone.
+            syncOrphanDrawer();
         }).catch(function () {
             setBusy(btn, false);
         });
@@ -1734,13 +1762,17 @@
 
     /**
      * POST clear_resolved (admin).
+     *
+     * @param {HTMLElement} [btn]  button to show the busy spinner on
      */
-    function doClearResolved() {
+    function doClearResolved(btn) {
         if (!confirm(t('confirm_clear_resolved', 'Delete all resolved annotations on this page?'))) return;
+        setBusy(btn, true);
         ajax({
             action: 'clear_resolved',
             id:     _info.pageId,
         }).then(function (data) {
+            setBusy(btn, false);
             if (!data.success) {
                 showError(t('error_clear', 'Could not clear — please try again.'), data);
                 return;
@@ -1751,18 +1783,27 @@
             });
             closePanel();
             renderAll();
+            // Deleting resolved orphans may empty the drawer — sync/remove it.
+            syncOrphanDrawer();
+        }).catch(function () {
+            setBusy(btn, false);
+            alert(t('error_clear', 'Could not clear — please try again.'));
         });
     }
 
     /**
      * POST clear_orphaned (admin).
+     *
+     * @param {HTMLElement} [btn]  button to show the busy spinner on
      */
-    function doClearOrphaned() {
+    function doClearOrphaned(btn) {
         if (!confirm(t('confirm_clear_orphaned', 'Delete all orphaned annotations on this page?'))) return;
+        setBusy(btn, true);
         ajax({
             action: 'clear_orphaned',
             id:     _info.pageId,
         }).then(function (data) {
+            setBusy(btn, false);
             if (!data.success) {
                 showError(t('error_clear', 'Could not clear — please try again.'), data);
                 return;
@@ -1772,6 +1813,11 @@
             });
             closePanel();
             renderAll();
+            // All orphans are gone now — tear down the drawer if it is open.
+            syncOrphanDrawer();
+        }).catch(function () {
+            setBusy(btn, false);
+            alert(t('error_clear', 'Could not clear — please try again.'));
         });
     }
 
