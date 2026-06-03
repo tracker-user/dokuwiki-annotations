@@ -1,7 +1,7 @@
 base   annotations
 author TrackerUser
 email  -
-date   2026-06-02
+date   2026-06-03
 name   Annotations
 desc   Word- and sentence-level annotations on wiki pages — stored out-of-band, with threaded replies
 url    https://github.com/tracker-user/dokuwiki-annotations

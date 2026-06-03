@@ -304,13 +304,14 @@ class helper_plugin_annotations extends DokuWiki_Plugin
     /**
      * Add a reply to an annotation.
      *
-     * @param string $id     page id
-     * @param string $annId  annotation id
-     * @param string $author username
-     * @param string $body   reply text
+     * @param string $id       page id
+     * @param string $annId    annotation id
+     * @param string $author   username
+     * @param string $body     reply text
+     * @param string $parentId id of the reply being replied to, or '' for root-level
      * @return array|false  the created reply, or false on invalid input
      */
-    public function addReply($id, $annId, $author, $body)
+    public function addReply($id, $annId, $author, $body, $parentId = '')
     {
         if ($author === '' || $author === null) {
             return false;
@@ -322,6 +323,7 @@ class helper_plugin_annotations extends DokuWiki_Plugin
         $now = time();
         $reply = [
             'id'       => $this->newId(),
+            'parentId' => preg_replace('/[^a-f0-9]/', '', (string) $parentId),
             'author'   => $author,
             'created'  => $now,
             'modified' => $now,

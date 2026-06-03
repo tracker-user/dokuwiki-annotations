@@ -5,7 +5,7 @@ Word- and sentence-level annotations on wiki pages, stored separately from the p
 ## Features
 
 - **Text-quote anchoring** — select any word or sentence; the annotation is tied to the quoted text plus its surrounding context, so it survives minor edits to the page.
-- **Threaded replies** — any logged-in reader can reply to an existing annotation.
+- **Threaded replies** — any logged-in reader can reply to an annotation, or reply to another reply for a nested discussion.
 - **Open / Resolved status** — mark a discussion closed; resolved annotations turn green.
 - **Gutter markers** — small icons in the left margin show at a glance where annotations live.
 - **Orphan detection** — when the annotated text is removed from the page, the annotation is flagged as orphaned and stays reachable via the counter. Admins can bulk-delete orphans.
@@ -45,7 +45,7 @@ The counter bar above the page content shows how many annotations the page has. 
 
 ### Replying
 
-Open the thread panel for any annotation and use the **Reply** field at the bottom. Any logged-in reader can reply.
+Open the thread panel for any annotation and use the **Reply** field at the bottom. Each individual reply also has its own **Reply** button, so conversations can nest. Any logged-in reader can reply.
 
 ### Resolving / reopening
 

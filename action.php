@@ -318,19 +318,20 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
             $this->sendError('Permission denied.');
             return;
         }
-        $annId = isset($payload['annId']) ? (string) $payload['annId'] : '';
-        $body  = isset($payload['body'])  ? (string) $payload['body']  : '';
+        $annId    = isset($payload['annId'])    ? (string) $payload['annId']    : '';
+        $body     = isset($payload['body'])     ? (string) $payload['body']     : '';
+        $parentId = isset($payload['parentId']) ? (string) $payload['parentId'] : '';
 
         if ($annId === '') {
             $this->sendError('Missing annId.');
             return;
         }
-        $result = $helper->addReply($id, $annId, $user, $body);
+        $result = $helper->addReply($id, $annId, $user, $body, $parentId);
         if ($result === false) {
             $this->sendError('Invalid reply data or annotation not found.');
             return;
         }
-        $this->sendSuccess(['reply' => $result]);
+        $this->sendSuccess(['annotation' => $helper->getAnnotation($id, $annId)]);
     }
 
     /**
@@ -660,8 +661,9 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
         $this->sendSuccess(['annotations' => $annotations]);
     }
 
-        /**
-     * Emit a JSON success response and exit.
+    /**
+     * Emit a JSON success response. The caller has already prevented the
+     * default AJAX handling, so the request ends after this output.
      *
      * @param array $extra additional fields merged into the response
      */
@@ -671,7 +673,7 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
     }
 
     /**
-     * Emit a JSON error response and exit.
+     * Emit a JSON error response.
      *
      * @param string $message human-readable error
      */

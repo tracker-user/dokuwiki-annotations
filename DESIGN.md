@@ -15,8 +15,9 @@ Hypothes.is and `ep_comments_page`:
 - **Text-quote anchored.** Each annotation is tied to the quoted text plus a
   little surrounding context, not to a character position, so it survives minor
   edits and is re-found in the rendered DOM on each page load.
-- **Threaded.** Annotations carry replies; both have open/resolved status at the
-  annotation level.
+- **Threaded.** Annotations carry replies, and a reply may itself reply to
+  another reply (each records a `parentId`), so a discussion nests into a tree.
+  Open/resolved status lives at the annotation level.
 - **Orphan-aware.** When the quoted text disappears from the page the annotation
   becomes an *orphan* — still stored, surfaced through a counter, and bulk-
   removable by an admin.
@@ -57,6 +58,7 @@ One pretty-printed JSON file per page at `metaFN($id, '.annotations')`
       "replies": [
         {
           "id": "x1y2z3a4b5c6d7e8",
+          "parentId": "",
           "author": "bob",
           "created": 1716336100,
           "modified": 1716336100,
@@ -67,6 +69,12 @@ One pretty-printed JSON file per page at `metaFN($id, '.annotations')`
   ]
 }
 ```
+
+Replies are stored as a **flat** list; `parentId` (empty for a top-level reply,
+otherwise the id of the reply being answered) lets the client rebuild the nested
+thread (`buildReplyTree`). The `reply`, `edit_reply` and `delete_reply` actions
+return the **full updated annotation**, so the panel re-renders the whole thread
+in a single round-trip.
 
 Limits and identifiers (`helper.php` constants): `SCHEMA_VERSION = 1`,
 `MAX_QUOTE = 1000`, `MAX_CONTEXT = 64`, `MAX_BODY = 10000`. IDs are
