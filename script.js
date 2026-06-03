@@ -1674,6 +1674,10 @@
             _annotations.set(data.annotation.id, mergeClientProps(data.annotation));
             if (typeof onOk === 'function') onOk();
             reopenPanel(payload.annId);
+            // If this annotation sits in the open orphan drawer, refresh it so
+            // an edited body / changed reply count shows there too. (The anchor
+            // is unchanged by these actions, so _orphaned flags stay valid.)
+            syncOrphanDrawer();
         }).catch(function () {
             setBusy(btn, false);
             alert(t(errKey, errText));

@@ -23,8 +23,8 @@
  */
 
 :root {
-    --ann-open-rgb: var(--ann-open-rgb);     /* amber — open / unresolved */
-    --ann-resolved-rgb: var(--ann-resolved-rgb); /* green — resolved */
+    --ann-open-rgb: 245, 158, 11;     /* amber — open / unresolved (config default) */
+    --ann-resolved-rgb: 74, 222, 128; /* green — resolved (config default) */
 }
 
 /* =========================================================================

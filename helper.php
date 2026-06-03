@@ -193,18 +193,26 @@ class helper_plugin_annotations extends DokuWiki_Plugin
     protected function mutate($id, callable $modifier)
     {
         $file = $this->getFile($id);
-        io_lock($file);
+        // Lock on a sentinel key, NOT $file itself: writeFile() below calls
+        // io_saveFile($file), which takes its own io_lock($file) internally.
+        // Locking $file here would collide with that inner lock — io_lock
+        // busy-waits ~3s for the stale-lock timeout on every write and then
+        // proceeds, defeating mutual exclusion (see DokuWiki TaskRunner). A
+        // distinct key serialises the read-modify-write across requests while
+        // leaving io_saveFile's lock uncontended.
+        $lock = $file . '.lock';
+        io_lock($lock);
 
         $annotations = $this->getAnnotations($id);
         $outcome = $modifier($annotations);
 
         if ($outcome === false) {
-            io_unlock($file);
+            io_unlock($lock);
             return false;
         }
 
         $ok = $this->writeFile($id, $annotations);
-        io_unlock($file);
+        io_unlock($lock);
         return $ok ? $outcome : false;
     }
 

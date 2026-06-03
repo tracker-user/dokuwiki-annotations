@@ -180,13 +180,18 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
             if ($embedMax <= 0) {
                 $embedMax = self::DEFAULT_EMBED_MAX_BYTES;
             }
-            $listJson = json_encode($annotations, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $listJson = json_encode($annotations, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             if ($listJson !== false && strlen($listJson) <= $embedMax) {
                 $data['annotations'] = $annotations;
             }
         }
 
-        $payload = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        // JSON_HEX_TAG escapes < and > to < / >. This payload is
+        // appended inside the page's inline <script> (below), so a body
+        // containing "</script>" would otherwise close the script element and
+        // inject arbitrary HTML — a stored XSS reachable by anyone who can
+        // annotate. HEX_TAG neutralises every tag-based breakout.
+        $payload = json_encode($data, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         // The inline script block containing "var JSINFO = ...;" is in
         // $event->data['script']. Find it and append our assignment so it
@@ -337,7 +342,7 @@ class action_plugin_annotations extends DokuWiki_Action_Plugin
                 $this->actionClearOrphaned($helper, $id, $isAdmin);
                 break;
             default:
-                $this->sendError('Unknown action: ' . hsc($action));
+                $this->sendError('Unknown action: ' . $action);
         }
     }
 
