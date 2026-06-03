@@ -125,6 +125,17 @@
         renderCounter(annInfo.stats || {total: 0, open: 0, resolved: 0}, 0);
         loadAnnotations();
         initSelectionCapture(content);
+
+        // Close the open panel when the user presses Escape.
+        document.addEventListener('keydown', function (e) {
+            if ((e.key === 'Escape' || e.key === 'Esc') && _openPanel) {
+                closePanel();
+            }
+        });
+
+        // Keep gutter markers aligned with their highlights when the viewport
+        // width changes: both the .page column and the highlights reflow.
+        window.addEventListener('resize', repositionMarkers);
     }
 
     // -----------------------------------------------------------------------
@@ -317,6 +328,26 @@
     }
 
     /**
+     * True if the given node is inside an existing highlight span.
+     * Used to block opening a new-annotation tooltip on already-annotated text.
+     *
+     * @param {Node} node
+     * @returns {bool}
+     */
+    function isInsideHighlight(node) {
+        var el = (node && node.nodeType === 1) ? node : (node ? node.parentNode : null);
+        while (el && el !== document.body) {
+            if (el.className &&
+                (el.className.indexOf(CLS_HIGHLIGHT_OPEN)     !== -1 ||
+                 el.className.indexOf(CLS_HIGHLIGHT_RESOLVED) !== -1)) {
+                return true;
+            }
+            el = el.parentNode;
+        }
+        return false;
+    }
+
+    /**
      * True if the element (or its ancestor) is part of our annotation UI.
      *
      * @param {Node} el
@@ -436,36 +467,28 @@
      * @param {object} ann
      */
     function wrapHighlight(range, ann) {
+        var preview = ann.body || '';
+        var span = document.createElement('span');
+        span.className = ann.status === 'resolved'
+            ? CLS_HIGHLIGHT_RESOLVED
+            : CLS_HIGHLIGHT_OPEN;
+        span.dataset.annId = ann.id;
+        span.title = preview.slice(0, 80) + (preview.length > 80 ? '…' : '');
+        span.addEventListener('click', function (e) {
+            e.stopPropagation();
+            openPanel(ann.id);
+        });
+
         try {
-            var span = document.createElement('span');
-            span.className = ann.status === 'resolved'
-                ? CLS_HIGHLIGHT_RESOLVED
-                : CLS_HIGHLIGHT_OPEN;
-            span.dataset.annId = ann.id;
-            span.title = ann.body.slice(0, 80) + (ann.body.length > 80 ? '…' : '');
-            span.addEventListener('click', function (e) {
-                e.stopPropagation();
-                openPanel(ann.id);
-            });
             range.surroundContents(span);
             ann._highlightEl = span;
         } catch (e) {
-            // surroundContents throws if the range crosses element boundaries.
-            // Fall back to insertNode with a cloned range fragment.
+            // surroundContents throws if the range crosses element boundaries;
+            // fall back to extract + insert, reusing the same (still-empty) span.
             try {
-                var frag = range.extractContents();
-                var span2 = document.createElement('span');
-                span2.className = ann.status === 'resolved'
-                    ? CLS_HIGHLIGHT_RESOLVED
-                    : CLS_HIGHLIGHT_OPEN;
-                span2.dataset.annId = ann.id;
-                span2.appendChild(frag);
-                span2.addEventListener('click', function (e) {
-                    e.stopPropagation();
-                    openPanel(ann.id);
-                });
-                range.insertNode(span2);
-                ann._highlightEl = span2;
+                span.appendChild(range.extractContents());
+                range.insertNode(span);
+                ann._highlightEl = span;
             } catch (e2) {
                 ann._highlightEl = null;
             }
@@ -495,34 +518,45 @@
     // -----------------------------------------------------------------------
 
     /**
-     * Render a small marker in the gutter for every anchored annotation.
-     * Markers are absolutely positioned relative to the content wrapper.
+     * Render a small marker for every anchored annotation. Markers are
+     * appended to document.body as absolutely-positioned elements so that
+     * template overflow rules on inner containers cannot clip them.
+     *
+     * All markers share the same X position — just to the left of the .page
+     * content column — so they form a tidy vertical column in the margin.
      */
     function renderGutterMarkers() {
-        // Append markers to .page (position:relative), not #dokuwiki__content
-        // (which also wraps the sidebar nav and would capture pointer events).
-        var pageEl = document.querySelector('.' + PAGE_CLS);
-        if (!pageEl) return;
+        var scrollTop  = window.pageYOffset || document.documentElement.scrollTop;
+        var scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+        var markerLeft = gutterMarkerLeft(scrollLeft);
+
+        // Speech bubble SVG — clearly communicates "annotation here".
+        var ICON_SVG =
+            '<svg viewBox="0 0 16 16" fill="currentColor" width="10" height="10" aria-hidden="true">' +
+            '<rect x="1" y="1" width="14" height="10" rx="2"/>' +
+            '<path d="M4 14 L4 11 L8 11 Z"/>' +
+            '</svg>';
 
         _annotations.forEach(function (ann) {
             if (!ann._highlightEl) return; // orphan
 
-            var el      = ann._highlightEl;
-            var rect    = el.getBoundingClientRect();
-            var pageRect = pageEl.getBoundingClientRect();
+            var rect = ann._highlightEl.getBoundingClientRect();
 
             var marker = document.createElement('button');
-            marker.className  = CLS_GUTTER_MARKER;
-            marker.dataset.annId = ann.id;
+            marker.className      = CLS_GUTTER_MARKER;
+            marker.dataset.annId  = ann.id;
+            marker.dataset.status = ann.status || 'open'; // drives CSS amber/green colour
             marker.setAttribute('aria-label', t('label_annotation', 'Annotation'));
-            marker.type = 'button';
-            // top is relative to .page's top edge + its current scroll offset
-            marker.style.top = (rect.top - pageRect.top + pageEl.scrollTop) + 'px';
+            marker.type      = 'button';
+            marker.innerHTML = ICON_SVG;
+            // Align vertically with the first line of the highlight.
+            marker.style.top  = (rect.top + scrollTop + 3) + 'px';
+            marker.style.left = markerLeft + 'px';
             marker.addEventListener('click', function (e) {
                 e.stopPropagation();
                 openPanel(ann.id);
             });
-            pageEl.appendChild(marker);
+            document.body.appendChild(marker);
             ann._markerEl = marker;
         });
     }
@@ -534,6 +568,43 @@
         var markers = document.querySelectorAll('.' + CLS_GUTTER_MARKER);
         Array.prototype.forEach.call(markers, function (m) {
             if (m.parentNode) m.parentNode.removeChild(m);
+        });
+    }
+
+    /**
+     * The shared X position (document coordinates) for every gutter marker:
+     * just inside the left padding of the .page content column, so the markers
+     * form a tidy vertical strip in the margin. Falls back to 4px when the
+     * column cannot be measured. Reads the theme's computed padding so it
+     * adapts to the template.
+     *
+     * @param {number} scrollLeft current horizontal scroll offset
+     * @returns {number}
+     */
+    function gutterMarkerLeft(scrollLeft) {
+        var pageEl = document.querySelector('.' + PAGE_CLS) || document.getElementById(CONTENT_ID);
+        if (!pageEl) return 4;
+        var pageRect = pageEl.getBoundingClientRect();
+        var padLeft  = parseInt(window.getComputedStyle(pageEl).paddingLeft, 10) || 32;
+        return pageRect.left + scrollLeft + Math.max(2, Math.floor(padLeft * 0.25));
+    }
+
+    /**
+     * Re-align every existing marker with its highlight without rebuilding the
+     * DOM. Highlights shift when a panel is inserted/removed or the window is
+     * resized, but markers live in document.body at absolute coordinates, so
+     * they would otherwise drift out of line. Cheap — only touches inline
+     * top/left on the handful of markers present.
+     */
+    function repositionMarkers() {
+        var scrollTop  = window.pageYOffset || document.documentElement.scrollTop;
+        var scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+        var markerLeft = gutterMarkerLeft(scrollLeft);
+        _annotations.forEach(function (ann) {
+            if (!ann._markerEl || !ann._highlightEl) return;
+            var rect = ann._highlightEl.getBoundingClientRect();
+            ann._markerEl.style.top  = (rect.top + scrollTop + 3) + 'px';
+            ann._markerEl.style.left = markerLeft + 'px';
         });
     }
 
@@ -572,6 +643,7 @@
             orphanLink.addEventListener('click', function (e) {
                 e.preventDefault();
                 toggleOrphanDrawer();
+                repositionMarkers();
             });
             bar.appendChild(orphanLink);
         }
@@ -595,9 +667,22 @@
             }
         }
 
-        var content = document.getElementById(CONTENT_ID);
-        if (content && content.parentNode) {
-            content.parentNode.insertBefore(bar, content);
+        // Insert inside .page, right after #dw__toc if present.
+        // The TOC is float:right so placing the bar after it (not before) lets
+        // it sit to the left of the float instead of pushing the TOC down.
+        var pageEl = document.querySelector('.' + PAGE_CLS);
+        if (pageEl) {
+            var toc = pageEl.querySelector('#dw__toc');
+            if (toc && toc.nextSibling) {
+                pageEl.insertBefore(bar, toc.nextSibling);
+            } else if (toc) {
+                pageEl.appendChild(bar);
+            } else {
+                pageEl.insertBefore(bar, pageEl.firstChild);
+            }
+        } else {
+            var content = document.getElementById(CONTENT_ID);
+            if (content) content.insertBefore(bar, content.firstChild);
         }
     }
 
@@ -629,9 +714,12 @@
      * Open the thread panel for the given annotation id.
      * If that panel is already open, close it.
      *
-     * @param {string} annId
+     * @param {string}  annId
+     * @param {boolean} [focusReply]  focus the reply box once open (default true);
+     *                                reopenPanel passes false so re-rendering after
+     *                                an action doesn't yank the viewport to the form.
      */
-    function openPanel(annId) {
+    function openPanel(annId, focusReply) {
         if (_openAnnId === annId) {
             closePanel();
             return;
@@ -656,7 +744,13 @@
             if (content) content.appendChild(panel);
         }
 
-        panel.querySelector('.ann-body-input') && panel.querySelector('.ann-body-input').focus();
+        if (focusReply !== false) {
+            var input = panel.querySelector('.ann-body-input');
+            if (input) input.focus();
+        }
+
+        // The panel grew the document; nudge markers below it back into line.
+        repositionMarkers();
     }
 
     /**
@@ -668,6 +762,7 @@
         }
         _openPanel = null;
         _openAnnId = null;
+        repositionMarkers();
     }
 
     /**
@@ -701,29 +796,25 @@
         panel.dataset.annId  = ann.id;
         panel.dataset.status = ann.status || 'open'; // drives the resolved accent in style.css
 
-        // Header
-        var header = document.createElement('div');
-        header.className = 'ann-panel-header';
+        // Main annotation thread entry (close button lives in its meta row).
+        var rootEntry = buildThreadEntry(ann, true);
+        var meta = rootEntry.querySelector('.ann-meta');
+        if (meta) {
+            var closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'ann-btn ann-close';
+            closeBtn.setAttribute('aria-label', t('label_close', 'Close'));
+            closeBtn.textContent = '×'; // ×
+            closeBtn.style.marginLeft = 'auto';
+            closeBtn.addEventListener('click', closePanel);
+            meta.appendChild(closeBtn);
+        }
+        panel.appendChild(rootEntry);
 
-        var closeBtn = document.createElement('button');
-        closeBtn.type = 'button';
-        closeBtn.className = 'ann-btn ann-close';
-        closeBtn.setAttribute('aria-label', t('label_close', 'Close'));
-        closeBtn.textContent = '×';
-        closeBtn.addEventListener('click', closePanel);
-        header.appendChild(closeBtn);
+        // Replies: build hierarchy from flat list and render depth-indented.
+        appendReplyTree(panel, ann, buildReplyTree(ann.replies || []), 0);
 
-        panel.appendChild(header);
-
-        // Main annotation thread entry
-        panel.appendChild(buildThreadEntry(ann, true));
-
-        // Replies
-        (ann.replies || []).forEach(function (reply) {
-            panel.appendChild(buildReplyEntry(ann, reply));
-        });
-
-        // Reply form (if logged in and has read access — gate is server-side anyway)
+        // Reply form at the bottom for root-level replies.
         if (_loggedIn) {
             panel.appendChild(buildReplyForm(ann));
         }
@@ -768,12 +859,12 @@
         if (_loggedIn) {
             var resolveBtn = document.createElement('button');
             resolveBtn.type = 'button';
-            resolveBtn.className = 'ann-btn ann-btn-resolve';
+            resolveBtn.className = 'ann-btn ann-btn-primary';
             resolveBtn.textContent = ann.status === 'resolved'
                 ? t('btn_reopen', 'Reopen')
                 : t('btn_resolve', 'Resolve');
             resolveBtn.addEventListener('click', function () {
-                doResolve(ann.id, ann.status === 'resolved' ? 'open' : 'resolved');
+                doResolve(ann.id, ann.status === 'resolved' ? 'open' : 'resolved', resolveBtn);
             });
             actions.appendChild(resolveBtn);
         }
@@ -796,7 +887,7 @@
             delBtn.textContent = t('btn_delete', 'Delete');
             delBtn.addEventListener('click', function () {
                 if (confirm(t('confirm_delete', 'Delete this annotation?'))) {
-                    doDeleteAnnotation(ann.id);
+                    doDeleteAnnotation(ann.id, delBtn);
                 }
             });
             actions.appendChild(delBtn);
@@ -807,16 +898,22 @@
     }
 
     /**
-     * Build the DOM for one reply entry.
+     * Build the DOM for one reply entry, indented according to its nesting depth.
      *
-     * @param {object} ann   parent annotation
+     * @param {object} ann    parent annotation
      * @param {object} reply
+     * @param {number} depth  0 = direct reply to annotation; 1+ = nested
      * @returns {HTMLElement}
      */
-    function buildReplyEntry(ann, reply) {
+    function buildReplyEntry(ann, reply, depth) {
         var entry = document.createElement('div');
         entry.className = 'ann-thread-entry ann-reply';
         entry.dataset.replyId = reply.id;
+        // Indent nested replies up to 4 levels (1.5 em each).
+        var indent = Math.min(depth, 4) * 1.5 + 1.5;
+        if (indent > 0) {
+            entry.style.marginLeft = indent + 'em';
+        }
 
         entry.appendChild(buildMeta(reply.author, reply.created, null));
 
@@ -827,6 +924,27 @@
 
         var actions = document.createElement('div');
         actions.className = 'ann-actions';
+
+        // "Reply to this reply" button for logged-in users.
+        if (_loggedIn) {
+            var replyToBtn = document.createElement('button');
+            replyToBtn.type = 'button';
+            replyToBtn.className = 'ann-btn ann-btn-primary';
+            replyToBtn.textContent = t('btn_reply', 'Reply');
+            replyToBtn.addEventListener('click', function () {
+                // Toggle an inline reply form directly after this entry.
+                var next = entry.nextSibling;
+                if (next && next.classList && next.classList.contains('ann-inline-reply')) {
+                    next.parentNode.removeChild(next);
+                    return;
+                }
+                var form = buildInlineReplyForm(ann, reply.id, depth + 1);
+                entry.parentNode.insertBefore(form, entry.nextSibling);
+                var ta = form.querySelector('.ann-body-input');
+                if (ta) ta.focus();
+            });
+            actions.appendChild(replyToBtn);
+        }
 
         var canEdit = _isAdmin || reply.author === currentUser();
         if (canEdit && _loggedIn) {
@@ -845,7 +963,7 @@
             delBtn.textContent = t('btn_delete', 'Delete');
             delBtn.addEventListener('click', function () {
                 if (confirm(t('confirm_delete_reply', 'Delete this reply?'))) {
-                    doDeleteReply(ann.id, reply.id);
+                    doDeleteReply(ann.id, reply.id, delBtn);
                 }
             });
             actions.appendChild(delBtn);
@@ -853,6 +971,99 @@
 
         entry.appendChild(actions);
         return entry;
+    }
+
+    /**
+     * Build a nested tree structure from a flat reply list. Replies without a
+     * known parentId (including legacy replies with no parentId field) are
+     * treated as root-level.
+     *
+     * @param {Array} replies  flat array of reply objects
+     * @returns {Array}        array of {reply, children} nodes
+     */
+    function buildReplyTree(replies) {
+        var map = {};
+        var roots = [];
+        replies.forEach(function (r) {
+            map[r.id] = {reply: r, children: []};
+        });
+        replies.forEach(function (r) {
+            var pid = r.parentId || '';
+            if (pid && map[pid]) {
+                map[pid].children.push(map[r.id]);
+            } else {
+                roots.push(map[r.id]);
+            }
+        });
+        return roots;
+    }
+
+    /**
+     * Recursively append reply entries into the panel.
+     *
+     * @param {HTMLElement} panel
+     * @param {object}      ann
+     * @param {Array}       nodes  array of {reply, children} tree nodes
+     * @param {number}      depth
+     */
+    function appendReplyTree(panel, ann, nodes, depth) {
+        nodes.forEach(function (node) {
+            panel.appendChild(buildReplyEntry(ann, node.reply, depth));
+            if (node.children.length > 0) {
+                appendReplyTree(panel, ann, node.children, depth + 1);
+            }
+        });
+    }
+
+    /**
+     * Build an inline reply form that appears directly below a reply entry.
+     *
+     * @param {object} ann           parent annotation
+     * @param {string} parentReplyId id of the reply being replied to
+     * @param {number} depth         visual nesting depth for the new reply
+     * @returns {HTMLElement}
+     */
+    function buildInlineReplyForm(ann, parentReplyId, depth) {
+        var form = document.createElement('div');
+        form.className = 'ann-thread-entry ann-reply ann-inline-reply';
+        var indent = Math.min(depth, 4) * 1.5 + 1.5;
+        if (indent > 0) {
+            form.style.marginLeft = indent + 'em';
+        }
+
+        var ta = document.createElement('textarea');
+        ta.className = 'ann-body-input';
+        ta.placeholder = t('placeholder_reply', 'Write a reply…');
+        ta.rows = 2;
+        form.appendChild(ta);
+
+        var row = document.createElement('div');
+        row.className = 'ann-form-row';
+
+        var submitBtn = document.createElement('button');
+        submitBtn.type = 'button';
+        submitBtn.className = 'ann-btn ann-btn-primary';
+        submitBtn.textContent = t('btn_reply', 'Reply');
+        submitBtn.addEventListener('click', function () {
+            var body = ta.value.trim();
+            if (!body) return;
+            doAddReply(ann.id, body, function () {
+                if (form.parentNode) form.parentNode.removeChild(form);
+            }, submitBtn, parentReplyId);
+        });
+
+        var cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'ann-btn';
+        cancelBtn.textContent = t('btn_cancel', 'Cancel');
+        cancelBtn.addEventListener('click', function () {
+            if (form.parentNode) form.parentNode.removeChild(form);
+        });
+
+        row.appendChild(submitBtn);
+        row.appendChild(cancelBtn);
+        form.appendChild(row);
+        return form;
     }
 
     /**
@@ -924,7 +1135,7 @@
             if (!body) return;
             doAddReply(ann.id, body, function () {
                 ta.value = '';
-            });
+            }, submitBtn);
         });
         row.appendChild(submitBtn);
         form.appendChild(row);
@@ -946,7 +1157,7 @@
         var ta = document.createElement('textarea');
         ta.className = 'ann-body-input';
         ta.value = data.body || '';
-        ta.rows  = 4;
+        ta.rows  = 3;
 
         var row = document.createElement('div');
         row.className = 'ann-form-row';
@@ -959,9 +1170,9 @@
             var newBody = ta.value.trim();
             if (!newBody) return;
             if (type === 'annotation') {
-                doEditAnnotation(data.id || _openAnnId, newBody);
+                doEditAnnotation(data.id || _openAnnId, newBody, saveBtn);
             } else {
-                doEditReply(data.annId, data.replyId, newBody);
+                doEditReply(data.annId, data.replyId, newBody, saveBtn);
             }
         });
 
@@ -1035,7 +1246,20 @@
             drawer.appendChild(empty);
         }
 
-        content.appendChild(drawer);
+        // Insert right below the counter bar, which lives inside .page.
+        // All fallbacks also target .page so the drawer never stretches past
+        // the content column.
+        var bar = document.getElementById('ann-counter-bar');
+        if (bar && bar.parentNode) {
+            bar.parentNode.insertBefore(drawer, bar.nextSibling);
+        } else {
+            var pageEl2 = document.querySelector('.' + PAGE_CLS);
+            if (pageEl2) {
+                pageEl2.insertBefore(drawer, pageEl2.firstChild);
+            } else {
+                content.insertBefore(drawer, content.firstChild);
+            }
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -1097,6 +1321,11 @@
         }
         var range = sel.getRangeAt(0);
         if (!content.contains(range.commonAncestorContainer)) {
+            hideTooltip();
+            return;
+        }
+        // Don't open a new annotation when the selection overlaps existing annotated text.
+        if (isInsideHighlight(range.startContainer) || isInsideHighlight(range.endContainer)) {
             hideTooltip();
             return;
         }
@@ -1249,7 +1478,7 @@
         var ta = document.createElement('textarea');
         ta.className = 'ann-body-input';
         ta.placeholder = t('placeholder_body', 'Add a comment…');
-        ta.rows = 4;
+        ta.rows = 3;
         form.appendChild(ta);
 
         var row = document.createElement('div');
@@ -1264,7 +1493,7 @@
             if (!body) return;
             doCreate(anchor, body, function () {
                 if (form.parentNode) form.parentNode.removeChild(form);
-            });
+            }, submitBtn);
         });
 
         var cancelBtn = document.createElement('button');
@@ -1296,17 +1525,20 @@
     /**
      * POST create action and update state on success.
      *
-     * @param {object}   anchor
-     * @param {string}   body
-     * @param {Function} onSuccess
+     * @param {object}        anchor
+     * @param {string}        body
+     * @param {Function}      onSuccess
+     * @param {HTMLElement}   [btn]  button to disable while the request is in flight
      */
-    function doCreate(anchor, body, onSuccess) {
+    function doCreate(anchor, body, onSuccess, btn) {
+        setBusy(btn, true);
         ajax({
             action: 'create',
             id:     _info.pageId,
             anchor: anchor,
             body:   body,
         }).then(function (data) {
+            setBusy(btn, false);
             if (!data.success) {
                 showError(t('error_save', 'Could not save — please try again.'), data);
                 return;
@@ -1316,97 +1548,110 @@
             if (typeof onSuccess === 'function') onSuccess(ann);
             renderAll();
         }).catch(function () {
+            setBusy(btn, false);
             alert(t('error_save', 'Could not save — please try again.'));
+        });
+    }
+
+    /**
+     * Run a thread-level mutation (reply / edit annotation / edit reply /
+     * delete reply): POST the payload, then on success store the returned
+     * annotation — keeping the client-side render state via mergeClientProps —
+     * and re-open its panel. The server returns the full updated annotation, so
+     * no second GET is needed. These four actions share this exact shape;
+     * create / delete-annotation / resolve differ (they re-render the whole
+     * overlay) and stay separate below.
+     *
+     * @param {object}      payload  AJAX body; must carry annId
+     * @param {HTMLElement} [btn]    button to show the busy spinner on
+     * @param {string}      errKey   lang key for the failure message
+     * @param {string}      errText  English fallback for that message
+     * @param {Function}    [onOk]   optional callback run before re-rendering
+     */
+    function submitThreadAction(payload, btn, errKey, errText, onOk) {
+        setBusy(btn, true);
+        ajax(payload).then(function (data) {
+            setBusy(btn, false);
+            if (!data.success) {
+                showError(t(errKey, errText), data);
+                return;
+            }
+            _annotations.set(data.annotation.id, mergeClientProps(data.annotation));
+            if (typeof onOk === 'function') onOk();
+            reopenPanel(payload.annId);
+        }).catch(function () {
+            setBusy(btn, false);
+            alert(t(errKey, errText));
         });
     }
 
     /**
      * POST reply action and refresh the open panel.
      *
-     * @param {string}   annId
-     * @param {string}   body
-     * @param {Function} onSuccess
+     * @param {string}      annId
+     * @param {string}      body
+     * @param {Function}    onSuccess
+     * @param {HTMLElement} [btn]
+     * @param {string}      [parentReplyId]  id of the reply being replied to, or ''
      */
-    function doAddReply(annId, body, onSuccess) {
-        ajax({
-            action: 'reply',
-            id:     _info.pageId,
-            annId:  annId,
-            body:   body,
-        }).then(function (data) {
-            if (!data.success) {
-                showError(t('error_save', 'Could not save — please try again.'), data);
-                return;
-            }
-            // Re-fetch the updated annotation from server.
-            refreshAnnotation(annId, function () {
-                if (typeof onSuccess === 'function') onSuccess();
-                reopenPanel(annId);
-            });
-        }).catch(function () {
-            alert(t('error_save', 'Could not save — please try again.'));
-        });
+    function doAddReply(annId, body, onSuccess, btn, parentReplyId) {
+        submitThreadAction({
+            action:   'reply',
+            id:       _info.pageId,
+            annId:    annId,
+            body:     body,
+            parentId: parentReplyId || '',
+        }, btn, 'error_save', 'Could not save — please try again.', onSuccess);
     }
 
     /**
      * POST edit_annotation and re-render.
      *
-     * @param {string} annId
-     * @param {string} body
+     * @param {string}      annId
+     * @param {string}      body
+     * @param {HTMLElement} [btn]
      */
-    function doEditAnnotation(annId, body) {
-        ajax({
+    function doEditAnnotation(annId, body, btn) {
+        submitThreadAction({
             action: 'edit_annotation',
             id:     _info.pageId,
             annId:  annId,
             body:   body,
-        }).then(function (data) {
-            if (!data.success) {
-                showError(t('error_save', 'Could not save — please try again.'), data);
-                return;
-            }
-            var updated = data.annotation;
-            _annotations.set(updated.id, updated);
-            reopenPanel(annId);
-        });
+        }, btn, 'error_save', 'Could not save — please try again.');
     }
 
     /**
      * POST edit_reply and re-render.
      *
-     * @param {string} annId
-     * @param {string} replyId
-     * @param {string} body
+     * @param {string}      annId
+     * @param {string}      replyId
+     * @param {string}      body
+     * @param {HTMLElement} [btn]
      */
-    function doEditReply(annId, replyId, body) {
-        ajax({
-            action:   'edit_reply',
-            id:       _info.pageId,
-            annId:    annId,
-            replyId:  replyId,
-            body:     body,
-        }).then(function (data) {
-            if (!data.success) {
-                showError(t('error_save', 'Could not save — please try again.'), data);
-                return;
-            }
-            var updated = data.annotation;
-            _annotations.set(updated.id, updated);
-            reopenPanel(annId);
-        });
+    function doEditReply(annId, replyId, body, btn) {
+        submitThreadAction({
+            action:  'edit_reply',
+            id:      _info.pageId,
+            annId:   annId,
+            replyId: replyId,
+            body:    body,
+        }, btn, 'error_save', 'Could not save — please try again.');
     }
 
     /**
      * POST delete_annotation.
      *
-     * @param {string} annId
+     * @param {string}      annId
+     * @param {HTMLElement} [btn]
      */
-    function doDeleteAnnotation(annId) {
+    function doDeleteAnnotation(annId, btn) {
+        setBusy(btn, true);
         ajax({
             action: 'delete_annotation',
             id:     _info.pageId,
             annId:  annId,
         }).then(function (data) {
+            setBusy(btn, false);
             if (!data.success) {
                 showError(t('error_delete', 'Could not delete — please try again.'), data);
                 return;
@@ -1414,53 +1659,52 @@
             _annotations.delete(annId);
             closePanel();
             renderAll();
+        }).catch(function () {
+            setBusy(btn, false);
         });
     }
 
     /**
      * POST delete_reply and re-render.
      *
-     * @param {string} annId
-     * @param {string} replyId
+     * @param {string}      annId
+     * @param {string}      replyId
+     * @param {HTMLElement} [btn]
      */
-    function doDeleteReply(annId, replyId) {
-        ajax({
+    function doDeleteReply(annId, replyId, btn) {
+        submitThreadAction({
             action:  'delete_reply',
             id:      _info.pageId,
             annId:   annId,
             replyId: replyId,
-        }).then(function (data) {
-            if (!data.success) {
-                showError(t('error_delete', 'Could not delete — please try again.'), data);
-                return;
-            }
-            var updated = data.annotation;
-            _annotations.set(updated.id, updated);
-            reopenPanel(annId);
-        });
+        }, btn, 'error_delete', 'Could not delete — please try again.');
     }
 
     /**
      * POST resolve/reopen action.
      *
-     * @param {string} annId
-     * @param {string} status  'open' | 'resolved'
+     * @param {string}      annId
+     * @param {string}      status  'open' | 'resolved'
+     * @param {HTMLElement} [btn]
      */
-    function doResolve(annId, status) {
+    function doResolve(annId, status, btn) {
+        setBusy(btn, true);
         ajax({
             action: 'resolve',
             id:     _info.pageId,
             annId:  annId,
             status: status,
         }).then(function (data) {
+            setBusy(btn, false);
             if (!data.success) {
                 showError(t('error_status', 'Could not update the status — please try again.'), data);
                 return;
             }
-            var updated = data.annotation;
-            _annotations.set(updated.id, updated);
+            _annotations.set(data.annotation.id, data.annotation);
             renderAll();
             reopenPanel(annId);
+        }).catch(function () {
+            setBusy(btn, false);
         });
     }
 
@@ -1512,45 +1756,70 @@
     // -----------------------------------------------------------------------
 
     /**
-     * Re-fetch one annotation from the server and update local state.
-     *
-     * Note: the AJAX endpoint doesn't have a standalone "get one" action,
-     * so we ask the load endpoint (GET) and pull the matching entry out.
-     *
-     * @param {string}   annId
-     * @param {Function} cb
-     */
-    function refreshAnnotation(annId, cb) {
-        fetch(AJAX_URL + '&action=load&id=' + encodeURIComponent(_info.pageId), {
-            method: 'GET',
-        }).then(function (res) {
-            return res.json();
-        }).then(function (data) {
-            if (data && Array.isArray(data.annotations)) {
-                data.annotations.forEach(function (ann) {
-                    _annotations.set(ann.id, ann);
-                });
-            }
-            if (typeof cb === 'function') cb();
-        }).catch(function () {
-            if (typeof cb === 'function') cb();
-        });
-    }
-
-    /**
      * Close the current panel and re-open it (preserves scroll position and
      * re-renders the thread with fresh data).
      *
      * @param {string} annId
      */
     function reopenPanel(annId) {
+        // closePanel() first clears _openAnnId so openPanel() rebuilds instead
+        // of treating the same id as a toggle. focusReply=false keeps the
+        // viewport put after resolve / edit / delete actions.
         closePanel();
-        openPanel(annId);
+        openPanel(annId, false);
     }
 
     // -----------------------------------------------------------------------
     // Utilities
     // -----------------------------------------------------------------------
+
+    /**
+     * Disable a button and show a spinner while an AJAX request is in flight;
+     * restore label and width on completion.
+     *
+     * @param {HTMLElement|null|undefined} btn
+     * @param {boolean}                   busy
+     */
+    function setBusy(btn, busy) {
+        if (!btn) return;
+        if (busy) {
+            btn.disabled = true;
+            btn.dataset.prevText = btn.textContent;
+            // Lock the width before clearing text so the button doesn't shrink.
+            btn.style.minWidth = btn.offsetWidth + 'px';
+            btn.textContent = ' '; // non-breaking space keeps height
+            btn.classList.add('ann-btn-busy');
+        } else {
+            btn.disabled = false;
+            btn.classList.remove('ann-btn-busy');
+            if (btn.dataset.prevText !== undefined) {
+                btn.textContent = btn.dataset.prevText;
+                delete btn.dataset.prevText;
+            }
+            btn.style.minWidth = '';
+        }
+    }
+
+    /**
+     * Copy client-only runtime properties (_highlightEl, _markerEl,
+     * _orphaned, _range) from the currently stored annotation onto a
+     * freshly-returned server object before storing it, so that panels
+     * reopen at the correct position instead of falling back to the
+     * bottom of the page.
+     *
+     * @param {object} fresh  annotation object from the server
+     * @returns {object}      the same object, augmented
+     */
+    function mergeClientProps(fresh) {
+        var existing = _annotations.get(fresh.id);
+        if (existing) {
+            fresh._highlightEl = existing._highlightEl;
+            fresh._markerEl    = existing._markerEl;
+            fresh._orphaned    = existing._orphaned;
+            fresh._range       = existing._range;
+        }
+        return fresh;
+    }
 
     /**
      * The per-plugin JS language bundle, exposed by DokuWiki as

@@ -48,7 +48,6 @@
     gap: 0.5em;
     padding: 0.4em 0.75em;
     margin-bottom: 0.75em;
-    font-size: 0.85em;
     background: __background_alt__;
     border: 1px solid __border__;
     border-radius: 4px;
@@ -65,30 +64,44 @@
    Gutter markers
    ========================================================================= */
 
-/* Gutter markers are positioned relative to .page (the article area only),
-   NOT #dokuwiki__content which also contains the sidebar nav and would
-   break sidebar link click targets. script.js appends markers to .page. */
-.page {
-    position: relative;
-}
-
+/* Markers are appended to document.body as position:absolute elements so
+   that no template overflow:hidden can clip them. Top/left are set inline
+   via JS using getBoundingClientRect() + scroll offsets. All markers share
+   the same X position (left edge of the .page column) so they form a tidy
+   vertical column in the document margin. */
 .ann-gutter-marker {
     position: absolute;
-    left: -1.6em;
-    width: 1.2em;
-    height: 1.2em;
     padding: 0;
     border: none;
-    border-radius: 50%;
-    background-color: rgba(245, 158, 11, 0.75);
+    background: none;
+    color: rgba(245, 158, 11, 0.8); /* amber — open */
     cursor: pointer;
-    line-height: 1;
-    font-size: 0.6em;
-    transition: background-color 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    transition: color 0.15s ease, transform 0.12s ease;
+}
+
+/* Suppress any UA button background on all interactive states. */
+.ann-gutter-marker:hover,
+.ann-gutter-marker:focus,
+.ann-gutter-marker:active {
+    background: none;
+    outline: none;
+    box-shadow: none;
 }
 
 .ann-gutter-marker:hover {
-    background-color: rgba(245, 158, 11, 1);
+    color: rgba(245, 158, 11, 1);
+}
+
+.ann-gutter-marker[data-status="resolved"] {
+    color: rgba(74, 222, 128, 0.8); /* green — resolved */
+}
+
+.ann-gutter-marker[data-status="resolved"]:hover {
+    color: rgba(74, 222, 128, 1);
 }
 
 /* =========================================================================
@@ -99,16 +112,9 @@
     margin: 0.75em 0 1em;
     border: 1px solid __border__;
     border-left: 3px solid rgba(245, 158, 11, 0.7);
-    border-radius: 4px;
     background: __background_alt__;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-    font-size: 0.9em;
-}
-
-.ann-panel-header {
-    display: flex;
-    justify-content: flex-end;
-    padding: 0.3em 0.5em 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+    contain: layout;
 }
 
 /* =========================================================================
@@ -124,15 +130,20 @@
     border-bottom: none;
 }
 
+/* Root annotation entry: lighter background so it stands out from the panel. */
+.ann-thread-entry.ann-annotation {
+    background: __background__;
+}
+
+/* Reply entries: inset card with the same lighter background. */
 .ann-reply {
     margin-left: 1.5em;
     background: __background__;
     border-left: 2px solid __border__;
-    border-radius: 0 0 4px 4px;
 }
 
 /* =========================================================================
-   Meta row (avatar, author, time, status)
+   Meta row (avatar, author, time, status, close button)
    ========================================================================= */
 
 .ann-meta {
@@ -200,10 +211,10 @@
 }
 
 .ann-quote {
-    margin: 0.3em 0 0.5em 0;
+    margin-bottom: 0.65em;
     padding: 0.25em 0.6em;
     border-left: 3px solid rgba(245, 158, 11, 0.6);
-    color: __text_alt__;
+    color: __text__;
     font-style: italic;
     font-size: 0.9em;
     background: rgba(251, 191, 36, 0.08);
@@ -216,18 +227,18 @@
 
 .ann-actions {
     display: flex;
-    gap: 0.4em;
+    gap: 0.5em;
     flex-wrap: wrap;
-    margin-top: 0.3em;
+    margin-top: 0.65em;
 }
 
 .ann-btn {
     display: inline-block;
     padding: 0.2em 0.55em;
-    font-size: 0.82em;
+    font-size: 0.85em;
     border: 1px solid __border__;
     border-radius: 3px;
-    background: __background__;
+    background: __background__ !important;
     color: __text__;
     cursor: pointer;
     line-height: 1.4;
@@ -235,17 +246,76 @@
 }
 
 .ann-btn:hover {
-    background: __background_alt__;
+    background: __background_alt__ !important;
 }
 
 .ann-btn-primary {
-    background: __link__;
+    background: __link__ !important;
     border-color: __link__;
     color: #fff;
 }
 
 .ann-btn-primary:hover {
+    background: __link__ !important;
+    color: #fff;
     opacity: 0.88;
+}
+
+/* Disabled state: prevent UA-stylesheet background overrides and ensure
+   primary buttons keep their link colour. */
+.ann-btn:disabled,
+.ann-btn[disabled] {
+    background: __background__;
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.ann-btn:disabled:hover,
+.ann-btn[disabled]:hover {
+    background: __background__;
+}
+
+.ann-btn-primary:disabled,
+.ann-btn-primary[disabled] {
+    background: __link__;
+    color: #fff;
+}
+
+.ann-btn-primary:disabled:hover,
+.ann-btn-primary[disabled]:hover {
+    background: __link__;
+    opacity: 0.55;
+}
+
+/* Spinner shown while an AJAX request is in flight (set by setBusy()).
+   The translate(-50%,-50%) is baked into every keyframe so it stays perfectly
+   centred regardless of sub-pixel rounding and never jigles. */
+@keyframes ann-spin {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.ann-btn-busy {
+    position: relative;
+    color: transparent;
+}
+
+.ann-btn-busy::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0.75em;
+    height: 0.75em;
+    border: 2px solid rgba(0, 0, 0, 0.25);
+    border-top-color: rgba(0, 0, 0, 0.75);
+    border-radius: 50%;
+    animation: ann-spin 0.6s linear infinite;
+}
+
+.ann-btn-primary.ann-btn-busy::after {
+    border-color: rgba(255, 255, 255, 0.35);
+    border-top-color: rgba(255, 255, 255, 0.9);
 }
 
 .ann-btn-danger {
@@ -259,22 +329,24 @@
 
 .ann-btn-admin {
     border-color: __border__;
-    color: __text_alt__;
-    font-size: 0.78em;
+    color: __text__;
 }
 
+/* Close button — lives inside .ann-meta, pushed right via margin-left:auto (set in JS). */
 .ann-close {
-    font-size: 1.1em;
+    font-size: 1.35em;
     line-height: 1;
-    padding: 0.1em 0.35em;
+    padding: 0.05em 0.3em;
     border: none;
-    background: none;
+    background: none !important;
     color: __text_alt__;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 .ann-close:hover {
     color: __text__;
+    background: none !important;
 }
 
 /* =========================================================================
@@ -284,15 +356,14 @@
 .ann-reply-form,
 .ann-new-form {
     padding: 0.65em 0.85em;
-    border-top: 1px solid __border__;
 }
 
 .ann-new-form {
     margin: 0.75em 0 1em;
     border: 1px solid __border__;
     border-left: 3px solid rgba(245, 158, 11, 0.7);
-    border-radius: 4px;
     background: __background_alt__;
+    contain: layout;
 }
 
 .ann-body-input {
@@ -301,23 +372,24 @@
     box-sizing: border-box;
     padding: 0.4em 0.6em;
     font: inherit;
-    font-size: 0.9em;
     border: 1px solid __border__;
-    border-radius: 3px;
     background: __background__;
     color: __text__;
     resize: vertical;
-    margin-bottom: 0.4em;
+    margin-bottom: 0.65em;
 }
 
 .ann-body-input:focus {
-    outline: 2px solid __link__;
-    outline-offset: 1px;
+    outline: 1px solid __link__;
 }
 
 .ann-form-row {
     display: flex;
     gap: 0.4em;
+}
+
+.ann-form-row + .ann-quote {
+    margin-top: 0.65em;
 }
 
 /* =========================================================================
@@ -327,9 +399,6 @@
 .ann-tooltip {
     position: absolute;
     z-index: 9000;
-    padding: 0.25em 0.4em;
-    background: __background_alt__;
-    border: 1px solid __border__;
     border-radius: 4px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
@@ -339,7 +408,8 @@
    ========================================================================= */
 
 .ann-orphan-drawer {
-    margin: 1.5em 0 0.5em;
+    display: flow-root; /* BFC: shrinks to avoid overlapping the floated TOC */
+    margin-bottom: 0.65em;
     padding: 0.75em 1em;
     border: 1px dashed __border__;
     border-radius: 4px;
@@ -349,12 +419,12 @@
 .ann-orphan-drawer h4 {
     margin: 0 0 0.3em;
     font-size: 0.95em;
-    color: __text_alt__;
+    color: __text__;
 }
 
 .ann-orphan-note {
     font-size: 0.85em;
-    color: __text_alt__;
+    color: __text__;
     margin-bottom: 0.75em;
 }
 
