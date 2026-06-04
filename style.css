@@ -233,7 +233,6 @@
     padding: 0.25em 0.6em;
     border-left: 3px solid ~"rgba(var(--ann-open-rgb), 0.6)";
     color: __text__;
-    font-style: italic;
     font-size: 0.9em;
     background: ~"rgba(var(--ann-open-rgb), 0.08)";
     border-radius: 0 2px 2px 0;
