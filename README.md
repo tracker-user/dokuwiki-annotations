@@ -38,6 +38,7 @@ All settings live under **Admin → Configuration Settings → annotations**:
 | `embed_max_bytes` | `131072` | Largest annotation list (bytes) shipped inline with the page. Bigger lists load via a separate AJAX request instead, keeping every page view lean. |
 | `context_length` | `64` | Characters of surrounding text stored on each side of a quote, used to re-locate it after edits and to disambiguate repeated quotes. `0` disables context. |
 | `body_cap` | `10000` | Maximum length (characters) of an annotation or reply body; longer input is truncated. |
+| `entries_per_page` | `25` | Rows per page in the **Admin → Annotations** overview of annotated pages. `0` shows every page on a single page. |
 
 ## Usage
 
@@ -78,6 +79,19 @@ Admins see two extra buttons in the counter bar:
 |--------|--------|
 | **Clear resolved** | Permanently deletes all resolved annotations on the page |
 | **Clear orphaned** | Re-checks the page, then permanently deletes the orphaned annotations |
+
+### Admin: annotated-pages overview
+
+**Admin → Annotations** lists every page that has annotations, with a **Normal** count
+(annotations whose quoted text is still on the page) and an **Orphaned** count (annotations
+whose text was deleted from the page):
+
+- **Search** by page title or ID, and **sort** by page title, normal count, or orphaned count.
+- **Clear orphaned** on a row removes just that page's orphaned annotations.
+- **Clear all orphaned (N)** at the top removes orphaned annotations across every page at once.
+
+Each clear re-checks the page server-side before deleting, so the counts are authoritative even
+if the page changed since it was last viewed. Long lists are paginated (`entries_per_page`).
 
 ### Turning the overlay off
 

@@ -215,4 +215,73 @@ class HelperTest extends DokuWikiTest
         $this->assertCount(1, $remaining);
         $this->assertEquals($present['id'], $remaining[0]['id']);
     }
+
+    // -----------------------------------------------------------------
+    //  Admin overview (enumeration & counts)
+    // -----------------------------------------------------------------
+
+    public function testGetAnnotatedPages(): void
+    {
+        $h = $this->helper();
+        $h->createAnnotation('anntest:listone', ['exact' => 'foo'], 'alice', 'b');
+        $h->createAnnotation('anntest:nested:listtwo', ['exact' => 'bar'], 'alice', 'b');
+
+        // a page whose only annotation is then deleted leaves an empty file and
+        // must NOT be listed
+        $gone = $h->createAnnotation('anntest:emptied', ['exact' => 'baz'], 'alice', 'b');
+        $h->deleteAnnotation('anntest:emptied', $gone['id']);
+
+        $pages = $h->getAnnotatedPages();
+        $this->assertContains('anntest:listone', $pages);
+        $this->assertContains('anntest:nested:listtwo', $pages);
+        $this->assertNotContains('anntest:emptied', $pages, 'emptied page is excluded');
+    }
+
+    public function testPageCountsSplitsNormalAndOrphaned(): void
+    {
+        $id = 'anntest:counts';
+        saveWikiText($id, 'Hello world, this is a wiki page about cats.', 'setup');
+
+        $h = $this->helper();
+        $h->createAnnotation($id, ['exact' => 'wiki page about cats'], 'alice', 'present');
+        $h->createAnnotation($id, ['exact' => 'text that is not here'], 'alice', 'gone');
+
+        $this->assertEquals(
+            ['total' => 2, 'normal' => 1, 'orphaned' => 1],
+            $h->pageCounts($id)
+        );
+    }
+
+    public function testPageCountsEmptyForUnannotatedPage(): void
+    {
+        $h = $this->helper();
+        $this->assertEquals(
+            ['total' => 0, 'normal' => 0, 'orphaned' => 0],
+            $h->pageCounts('anntest:never')
+        );
+    }
+
+    public function testClearOrphanedAllAcrossPages(): void
+    {
+        $h = $this->helper();
+        $ids = ['anntest:sweepa', 'anntest:sweepb'];
+        foreach ($ids as $id) {
+            saveWikiText($id, 'Hello world, this is a wiki page about cats.', 'setup');
+            $h->createAnnotation($id, ['exact' => 'wiki page about cats'], 'alice', 'present');
+            $h->createAnnotation($id, ['exact' => 'text that is not here'], 'alice', 'gone');
+        }
+
+        // clearOrphanedAll() is wiki-wide and the shared test data dir may carry
+        // annotated pages from earlier tests, so assert the seeded orphans are
+        // included (>= 2) rather than an exact global total, and verify each of
+        // our pages keeps exactly its one present annotation.
+        $removed = $h->clearOrphanedAll();
+        $this->assertGreaterThanOrEqual(2, $removed, 'at least the two seeded orphans are cleared');
+        foreach ($ids as $id) {
+            $remaining = $h->getAnnotations($id);
+            $this->assertCount(1, $remaining, $id . ' keeps only the present annotation');
+            $this->assertEquals('present', $remaining[0]['body'], $id . ' kept the right annotation');
+            $this->assertSame(0, $h->pageCounts($id)['orphaned'], $id . ' has no orphans left');
+        }
+    }
 }

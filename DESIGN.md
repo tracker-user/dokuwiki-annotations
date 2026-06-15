@@ -29,6 +29,7 @@ Hypothes.is and `ep_comments_page`:
 | `plugin.info.txt` | Manifest: name, author, version date, description, repository URL. |
 | `helper.php` | The per-page store, all CRUD, server-side orphan detection, and the **permission rules as the single source of truth**. Pure logic — permission methods take facts (user, admin flag, ACL level) as parameters and read no globals. |
 | `action.php` | Event registration; injecting the page payload into `JSINFO`; the AJAX endpoint and **permission enforcement** (gathers facts from DokuWiki globals, calls the helper). |
+| `admin.php` | Admin-only wiki-wide overview (**Admin → Annotations**): lists annotated pages with normal/orphaned counts; per-page and wiki-wide "clear orphaned". Reuses the `lastseen`/`usersettings` sortable + filterable + paginated table machinery. |
 | `script.js` | All front-end behaviour: boot/gate, load + re-anchor, highlights, gutter markers, counter, selection→new-annotation flow, thread panels, and AJAX. Plain IIFE, vanilla JS. |
 | `style.css` | Styling via DokuWiki theme tokens (`__background__`, `__text__`, …). The amber (open) / green (resolved) highlight hues come from the `--ann-open-rgb` / `--ann-resolved-rgb` custom properties that `action.php` injects from config (with `:root` fallbacks here). |
 | `lang/<iso>/lang.php` | The usersettings toggle label/description (PHP side) plus the front-end UI strings under `$lang['js']`, exposed to `script.js` as `LANG.plugins.annotations`. Ships `en`, `de`, `ru`, `ja`. |
@@ -117,6 +118,34 @@ highlight, no gutter marker).
   into spaces, tags/entities are stripped, whitespace normalised, and each
   annotation's `exact` is searched with `mb_strpos`. This re-check is the source
   of truth for deletion, so a stale client can't cause data loss.
+
+## Admin overview (`admin.php`)
+
+`admin_plugin_annotations` (**Admin → Annotations**, admin-only) is the wiki-wide companion to
+the per-page counter-bar buttons: it lists every annotated page with its **Normal** (present)
+and **Orphaned** counts and offers a per-page and a wiki-wide "clear orphaned".
+
+- **Enumeration.** `helper::getAnnotatedPages()` runs DokuWiki's `search()` over
+  `$conf['metadir']` with the `searchAnnotations` callback, which maps every `*.annotations`
+  file back to a page id via `pathID()` (and drops files left empty after all their annotations
+  were deleted). Counts come from `helper::pageCounts($id)`, which renders the page once
+  (`getPageText`) and applies the shared `quoteMissing()` rule — the same rule `findOrphaned()`
+  uses, so "Normal" on the overview means exactly "not orphaned".
+- **Cost.** Detecting orphans requires rendering each annotated page; because the overview sorts
+  and filters on the counts, every annotated page is processed per load. `p_wiki_xhtml` is
+  render-cached, so steady-state cost is low; the first load after edits re-renders.
+- **Table.** Reuses the JS-free sortable-header + per-column-filter + numbered-pager pattern from
+  `lastseen`/`usersettings`. Only the Page column is filterable (matching title **or** id); the
+  count columns and the actions column are not. The `entries_per_page` config controls paging.
+- **Clearing.** Both clears are POST forms guarded by `checkSecurityToken()` and
+  `helper::canClear(auth_isadmin())`, with Post/Redirect/Get back to the same view. To avoid an
+  illegal nested `<form>` (the table sits inside the GET filter form), the two POST forms are
+  rendered as siblings *after* it and the buttons reach them via the HTML5 `form=` attribute; the
+  per-row button supplies its page id through `name="clearpage"` (**not** `page`, which selects the
+  admin component). `clearOrphanedAll()` loops the annotated pages applying the per-page
+  `clearOrphaned()`, so the authoritative re-check runs for each. Destructive buttons confirm via
+  an inline `onclick` (the message is `json_encode`d then `hsc`d, safe at both the JS-string and
+  attribute layers).
 
 ## JSINFO injection (important gotcha)
 

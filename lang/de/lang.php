@@ -11,6 +11,39 @@ if (!defined('DOKU_INC')) die();
 $lang['toggle_label'] = 'Anmerkungen aktivieren';
 $lang['toggle_desc']  = 'Annotierten Text hervorheben und das Anmerkungsfeld auf Wiki-Seiten anzeigen.';
 
+// Admin-Übersicht (PHP-Seite)
+$lang['menu']               = 'Anmerkungen';
+$lang['heading']            = 'Annotierte Seiten';
+$lang['intro']              = 'Seiten mit Anmerkungen sowie deren normale und verwaiste Anzahl. Verwaiste Anmerkungen beziehen sich auf Text, der nicht mehr auf der Seite vorhanden ist.';
+
+$lang['th_page']            = 'Seite';
+$lang['th_normal']          = 'Normal';
+$lang['th_orphaned']        = 'Verwaist';
+$lang['th_actions']         = 'Aktionen';
+
+$lang['filter_search']      = 'Suchen';
+$lang['filter_clear']       = 'Zurücksetzen';
+
+$lang['btn_clear_orphaned'] = 'Verwaiste entfernen';
+$lang['btn_clear_all']      = 'Alle verwaisten entfernen (%d)';
+
+$lang['confirm_clear_page'] = 'Alle verwaisten Anmerkungen auf dieser Seite löschen?';
+$lang['confirm_clear_all']  = 'Alle verwaisten Anmerkungen auf allen Seiten löschen?';
+
+$lang['cleared_page']       = '%d verwaiste Anmerkung(en) von %s entfernt.';
+$lang['cleared_all']        = '%d verwaiste Anmerkung(en) auf allen Seiten entfernt.';
+$lang['clear_fail']         = 'Verwaiste Anmerkungen konnten nicht entfernt werden.';
+
+$lang['none']               = 'Keine Seite hat Anmerkungen.';
+$lang['none_match']         = 'Keine Seite entspricht Ihrer Suche.';
+$lang['shown']              = 'Zeige %d–%d von %d';
+
+$lang['pager_label']        = 'Seitennummerierung';
+$lang['pager_prev']         = 'Vorherige Seite';
+$lang['pager_next']         = 'Nächste Seite';
+
+$lang['helper_missing']     = 'Der Annotations-Helfer ist nicht verfügbar.';
+
 // Front-end strings (LANG.plugins.annotations.<key>)
 $lang['js']['counter_annotation']    = '1 Anmerkung';
 $lang['js']['counter_annotations']   = '%d Anmerkungen';

@@ -9,3 +9,4 @@ $lang['color_resolved']  = 'Highlight colour for resolved annotations. Hex value
 $lang['embed_max_bytes'] = 'Maximum size (bytes) of the annotation list shipped inline with the page. Larger lists are fetched via a separate AJAX request instead, keeping every page view lean.';
 $lang['context_length']  = 'Number of characters of surrounding text stored on each side of a quote to re-locate it later (and disambiguate repeated quotes). 0 disables context.';
 $lang['body_cap']        = 'Maximum length (characters) of an annotation or reply body. Longer input is truncated.';
+$lang['entries_per_page'] = 'Rows per page in the admin overview of annotated pages. 0 shows all on one page.';

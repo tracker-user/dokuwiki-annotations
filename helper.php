@@ -493,6 +493,28 @@ class helper_plugin_annotations extends DokuWiki_Plugin
         });
     }
 
+    /**
+     * Remove every orphaned annotation from every annotated page.
+     *
+     * Iterates the pages found by getAnnotatedPages() and applies the per-page
+     * clearOrphaned() to each, so the same authoritative re-check runs for
+     * every page. A page whose write fails is skipped rather than aborting the
+     * whole sweep.
+     *
+     * @return int total number of annotations removed across all pages
+     */
+    public function clearOrphanedAll()
+    {
+        $removed = 0;
+        foreach ($this->getAnnotatedPages() as $id) {
+            $n = $this->clearOrphaned($id);
+            if ($n !== false) {
+                $removed += (int) $n;
+            }
+        }
+        return $removed;
+    }
+
     // ---------------------------------------------------------------------
     //  Orphan detection
     // ---------------------------------------------------------------------
@@ -539,12 +561,119 @@ class helper_plugin_annotations extends DokuWiki_Plugin
 
         $orphaned = [];
         foreach ($annotations as $a) {
-            $exact = $this->normalizeWhitespace($a['anchor']['exact'] ?? '');
-            if ($exact === '' || mb_strpos($pageText, $exact) === false) {
+            if ($this->quoteMissing($a, $pageText)) {
                 $orphaned[] = $a;
             }
         }
         return $orphaned;
+    }
+
+    /**
+     * Whether an annotation's quoted text is absent from the page text.
+     *
+     * The single orphan rule, shared by findOrphaned() and pageCounts(): an
+     * annotation is orphaned when its (normalised) quoted text no longer
+     * appears in the (normalised) rendered page text.
+     *
+     * @param array  $annotation annotation array
+     * @param string $pageText   normalised plain-text page body (see getPageText)
+     * @return bool
+     */
+    protected function quoteMissing(array $annotation, $pageText)
+    {
+        $exact = $this->normalizeWhitespace($annotation['anchor']['exact'] ?? '');
+        return $exact === '' || mb_strpos($pageText, $exact) === false;
+    }
+
+    // ---------------------------------------------------------------------
+    //  Admin overview (enumeration & counts)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Every page that currently has at least one stored annotation.
+     *
+     * Scans the meta directory for ".annotations" files and maps each back to a
+     * page id. Files left behind with an empty annotation list (every
+     * annotation since deleted) are skipped, so the result matches what the
+     * admin overview shows.
+     *
+     * @return string[] page ids, in the natural order search() yields
+     */
+    public function getAnnotatedPages()
+    {
+        global $conf;
+        $dir = $conf['metadir'];
+        if (!is_dir($dir)) {
+            return [];
+        }
+        $found = [];
+        search($found, $dir, [$this, 'searchAnnotations'], []);
+
+        $ids = [];
+        foreach ($found as $item) {
+            if (!empty($this->getAnnotations($item['id']))) {
+                $ids[] = $item['id'];
+            }
+        }
+        return $ids;
+    }
+
+    /**
+     * search() callback collecting ".annotations" files as page ids.
+     *
+     * Directories are always traversed; files are matched on the extension and
+     * the derived id is validated with cleanID() so anything that is not a real
+     * page id is skipped.
+     *
+     * @param array  $data &$ result accumulator (each entry ['id' => string])
+     * @param string $base search root (the meta directory)
+     * @param string $file current path relative to $base (leading slash)
+     * @param string $type 'd' for directory, 'f' for file
+     * @param int    $lvl  recursion depth
+     * @param array  $opts options passed to search() (unused)
+     * @return bool whether search() should recurse into a directory
+     */
+    public function searchAnnotations(&$data, $base, $file, $type, $lvl, $opts)
+    {
+        if ($type === 'd') {
+            return true; // recurse into namespaces
+        }
+        if (!str_ends_with($file, '.annotations')) {
+            return false;
+        }
+        $id = pathID(substr($file, 0, -strlen('.annotations')));
+        if ($id === '' || $id !== cleanID($id)) {
+            return false;
+        }
+        $data[] = ['id' => $id];
+        return false;
+    }
+
+    /**
+     * Annotation counts for one page, splitting present from orphaned.
+     *
+     * The page is rendered once (getPageText) and every annotation tested with
+     * the shared quoteMissing() rule, so "normal" here means exactly "not
+     * orphaned" — the same definition the per-page clear uses.
+     *
+     * @param string $id page id
+     * @return array ['total'=>int, 'normal'=>int, 'orphaned'=>int]
+     */
+    public function pageCounts($id)
+    {
+        $annotations = $this->getAnnotations($id);
+        $total = count($annotations);
+        if ($total === 0) {
+            return ['total' => 0, 'normal' => 0, 'orphaned' => 0];
+        }
+        $pageText = $this->getPageText($id);
+        $orphaned = 0;
+        foreach ($annotations as $a) {
+            if ($this->quoteMissing($a, $pageText)) {
+                $orphaned++;
+            }
+        }
+        return ['total' => $total, 'normal' => $total - $orphaned, 'orphaned' => $orphaned];
     }
 
     // ---------------------------------------------------------------------

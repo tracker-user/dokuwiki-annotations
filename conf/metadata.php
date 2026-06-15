@@ -12,3 +12,4 @@ $meta['color_resolved']  = ['string', '_pattern' => '/^#[0-9a-fA-F]{6}$/'];
 $meta['embed_max_bytes'] = ['numeric', '_min' => 1024];
 $meta['context_length']  = ['numeric', '_min' => 0, '_max' => 1000];
 $meta['body_cap']        = ['numeric', '_min' => 100];
+$meta['entries_per_page'] = ['numeric', '_min' => 0];

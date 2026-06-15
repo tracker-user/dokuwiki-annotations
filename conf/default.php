@@ -9,3 +9,4 @@ $conf['color_resolved']  = '#4ade80';
 $conf['embed_max_bytes'] = 131072;
 $conf['context_length']  = 64;
 $conf['body_cap']        = 10000;
+$conf['entries_per_page'] = 25;

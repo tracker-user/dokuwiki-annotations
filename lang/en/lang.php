@@ -23,6 +23,42 @@ $lang['toggle_label'] = 'Enable annotations';
 $lang['toggle_desc']  = 'Highlight annotated text and show the annotation panel on wiki pages.';
 
 // ---------------------------------------------------------------------
+// Admin overview (PHP side, read via $this->getLang())
+// ---------------------------------------------------------------------
+
+$lang['menu']               = 'Annotations';
+$lang['heading']            = 'Annotated pages';
+$lang['intro']              = 'Pages that have annotations, with their normal and orphaned counts. Orphaned annotations reference text that no longer appears on the page.';
+
+$lang['th_page']            = 'Page';
+$lang['th_normal']          = 'Normal';
+$lang['th_orphaned']        = 'Orphaned';
+$lang['th_actions']         = 'Actions';
+
+$lang['filter_search']      = 'Search';
+$lang['filter_clear']       = 'Clear';
+
+$lang['btn_clear_orphaned'] = 'Clear orphaned';
+$lang['btn_clear_all']      = 'Clear all orphaned (%d)';
+
+$lang['confirm_clear_page'] = 'Delete all orphaned annotations on this page?';
+$lang['confirm_clear_all']  = 'Delete all orphaned annotations on every page?';
+
+$lang['cleared_page']       = 'Removed %d orphaned annotation(s) from %s.';
+$lang['cleared_all']        = 'Removed %d orphaned annotation(s) across all pages.';
+$lang['clear_fail']         = 'Could not clear orphaned annotations.';
+
+$lang['none']               = 'No pages have annotations.';
+$lang['none_match']         = 'No pages match your search.';
+$lang['shown']              = 'Showing %d–%d of %d';
+
+$lang['pager_label']        = 'Pagination';
+$lang['pager_prev']         = 'Previous page';
+$lang['pager_next']         = 'Next page';
+
+$lang['helper_missing']     = 'The annotations helper is unavailable.';
+
+// ---------------------------------------------------------------------
 // Front-end strings (exposed as LANG.plugins.annotations.<key>)
 // ---------------------------------------------------------------------
 

@@ -11,6 +11,39 @@ if (!defined('DOKU_INC')) die();
 $lang['toggle_label'] = '注釈を有効にする';
 $lang['toggle_desc']  = '注釈の付いたテキストを強調表示し、ウィキページに注釈パネルを表示します。';
 
+// 管理者向け一覧（PHP 側）
+$lang['menu']               = '注釈';
+$lang['heading']            = '注釈のあるページ';
+$lang['intro']              = '注釈のあるページと、その通常・孤立の件数の一覧です。孤立した注釈は、ページ上にもう存在しないテキストを参照しています。';
+
+$lang['th_page']            = 'ページ';
+$lang['th_normal']          = '通常';
+$lang['th_orphaned']        = '孤立';
+$lang['th_actions']         = '操作';
+
+$lang['filter_search']      = '検索';
+$lang['filter_clear']       = 'クリア';
+
+$lang['btn_clear_orphaned'] = '孤立を削除';
+$lang['btn_clear_all']      = 'すべての孤立を削除 (%d)';
+
+$lang['confirm_clear_page'] = 'このページの孤立した注釈をすべて削除しますか？';
+$lang['confirm_clear_all']  = 'すべてのページの孤立した注釈を削除しますか？';
+
+$lang['cleared_page']       = '%d 件の孤立した注釈を %s から削除しました。';
+$lang['cleared_all']        = 'すべてのページから %d 件の孤立した注釈を削除しました。';
+$lang['clear_fail']         = '孤立した注釈を削除できませんでした。';
+
+$lang['none']               = '注釈のあるページはありません。';
+$lang['none_match']         = '検索条件に一致するページはありません。';
+$lang['shown']              = '%d–%d / %d 件を表示';
+
+$lang['pager_label']        = 'ページ送り';
+$lang['pager_prev']         = '前のページ';
+$lang['pager_next']         = '次のページ';
+
+$lang['helper_missing']     = '注釈ヘルパーを利用できません。';
+
 // Front-end strings (LANG.plugins.annotations.<key>)
 $lang['js']['counter_annotation']    = '注釈 1 件';
 $lang['js']['counter_annotations']   = '注釈 %d 件';

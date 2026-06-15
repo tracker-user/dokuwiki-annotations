@@ -9,3 +9,4 @@ $lang['color_resolved']  = 'Markierungsfarbe für erledigte Anmerkungen. Hex-Wer
 $lang['embed_max_bytes'] = 'Maximale Größe (Bytes) der Anmerkungsliste, die direkt mit der Seite ausgeliefert wird. Größere Listen werden stattdessen per separater AJAX-Anfrage geladen, damit jeder Seitenaufruf schlank bleibt.';
 $lang['context_length']  = 'Anzahl der Zeichen des umgebenden Textes, die auf jeder Seite eines Zitats gespeichert werden, um es später wiederzufinden (und wiederholte Zitate zu unterscheiden). 0 deaktiviert den Kontext.';
 $lang['body_cap']        = 'Maximale Länge (Zeichen) einer Anmerkung oder Antwort. Längere Eingaben werden gekürzt.';
+$lang['entries_per_page'] = 'Zeilen pro Seite in der Admin-Übersicht der annotierten Seiten. 0 zeigt alle auf einer Seite.';

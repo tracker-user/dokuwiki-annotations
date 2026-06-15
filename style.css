@@ -460,3 +460,100 @@
 .ann-panel[data-status="resolved"] {
     border-left-color: ~"rgba(var(--ann-resolved-rgb), 0.6)";
 }
+
+/* =========================================================================
+   Admin overview (annotated-pages table) — mirrors the lastseen panel
+   ========================================================================= */
+
+.plugin_annotations_admin .annotations_admin_bar {
+    margin: 0.6em 0;
+}
+
+.plugin_annotations_admin .annotations_admin_id {
+    color: __text_alt__;
+    font-size: 90%;
+}
+
+.plugin_annotations_admin td.annotations_admin_num,
+.plugin_annotations_admin td.annotations_admin_actions,
+.plugin_annotations_admin .annotations_admin_filteractions,
+.plugin_annotations_admin th {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.plugin_annotations_admin th,
+.plugin_annotations_admin td {
+    vertical-align: middle;
+}
+
+/* per-column filter row */
+.plugin_annotations_admin .annotations_admin_filterrow td {
+    padding-top: 0.3em;
+    padding-bottom: 0.3em;
+}
+
+.plugin_annotations_admin .annotations_admin_filterrow input.edit {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.annotations_admin_clear {
+    margin-left: 0.5em;
+    font-size: 90%;
+}
+
+.annotations_admin_none {
+    text-align: center;
+    color: __text_alt__;
+    font-style: italic;
+}
+
+.annotations_admin_count {
+    color: __text_alt__;
+    font-size: 90%;
+}
+
+/* the POST forms targeted via the form= attribute carry only hidden inputs */
+.plugin_annotations_admin .annotations_admin_post {
+    display: none;
+}
+
+/* numbered pager */
+.annotations_admin_pager {
+    margin: 0.6em 0;
+}
+
+.annotations_admin_pager .pager_btn,
+.annotations_admin_pager .pager_cur,
+.annotations_admin_pager .pager_gap,
+.annotations_admin_pager .pager_disabled {
+    display: inline-block;
+    min-width: 1.6em;
+    padding: 0.15em 0.45em;
+    margin: 0 0.1em;
+    text-align: center;
+}
+
+.annotations_admin_pager .pager_btn,
+.annotations_admin_pager .pager_cur,
+.annotations_admin_pager .pager_disabled {
+    border: 1px solid __border__;
+}
+
+.annotations_admin_pager .pager_btn {
+    text-decoration: none;
+}
+
+.annotations_admin_pager .pager_cur {
+    background-color: __background_alt__;
+    font-weight: bold;
+}
+
+.annotations_admin_pager .pager_disabled {
+    color: __text_alt__;
+}
+
+.annotations_admin_pager .pager_gap {
+    border: 0;
+}
