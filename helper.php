@@ -468,6 +468,28 @@ class helper_plugin_annotations extends DokuWiki_Plugin
     }
 
     /**
+     * Remove every resolved annotation from every annotated page.
+     *
+     * The wiki-wide companion to clearResolved(), mirroring clearOrphanedAll():
+     * iterates the pages found by getAnnotatedPages() and applies the per-page
+     * clearResolved() to each. A page whose write fails is skipped rather than
+     * aborting the whole sweep.
+     *
+     * @return int total number of annotations removed across all pages
+     */
+    public function clearResolvedAll()
+    {
+        $removed = 0;
+        foreach ($this->getAnnotatedPages() as $id) {
+            $n = $this->clearResolved($id);
+            if ($n !== false) {
+                $removed += (int) $n;
+            }
+        }
+        return $removed;
+    }
+
+    /**
      * Remove every orphaned annotation from a page — those whose quoted text
      * no longer appears in the rendered page. The page is re-checked here, so
      * this is authoritative regardless of what a client believed.
@@ -650,30 +672,45 @@ class helper_plugin_annotations extends DokuWiki_Plugin
     }
 
     /**
-     * Annotation counts for one page, splitting present from orphaned.
+     * Annotation counts for one page, for the admin overview.
      *
      * The page is rendered once (getPageText) and every annotation tested with
      * the shared quoteMissing() rule, so "normal" here means exactly "not
-     * orphaned" — the same definition the per-page clear uses.
+     * orphaned" — the same definition the per-page clear-orphaned uses.
+     *
+     * "resolved" counts every annotation whose status is resolved, regardless of
+     * whether it is also orphaned, so it matches exactly what clearResolved()
+     * removes. The facets therefore overlap: a resolved-and-present annotation is
+     * counted in both "normal" and "resolved"; a resolved-and-orphaned one in
+     * both "orphaned" and "resolved".
      *
      * @param string $id page id
-     * @return array ['total'=>int, 'normal'=>int, 'orphaned'=>int]
+     * @return array ['total'=>int, 'normal'=>int, 'resolved'=>int, 'orphaned'=>int]
      */
     public function pageCounts($id)
     {
         $annotations = $this->getAnnotations($id);
         $total = count($annotations);
         if ($total === 0) {
-            return ['total' => 0, 'normal' => 0, 'orphaned' => 0];
+            return ['total' => 0, 'normal' => 0, 'resolved' => 0, 'orphaned' => 0];
         }
         $pageText = $this->getPageText($id);
         $orphaned = 0;
+        $resolved = 0;
         foreach ($annotations as $a) {
             if ($this->quoteMissing($a, $pageText)) {
                 $orphaned++;
             }
+            if (($a['status'] ?? 'open') === 'resolved') {
+                $resolved++;
+            }
         }
-        return ['total' => $total, 'normal' => $total - $orphaned, 'orphaned' => $orphaned];
+        return [
+            'total'    => $total,
+            'normal'   => $total - $orphaned,
+            'resolved' => $resolved,
+            'orphaned' => $orphaned,
+        ];
     }
 
     // ---------------------------------------------------------------------

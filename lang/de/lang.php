@@ -14,25 +14,33 @@ $lang['toggle_desc']  = 'Annotierten Text hervorheben und das Anmerkungsfeld auf
 // Admin-Übersicht (PHP-Seite)
 $lang['menu']               = 'Anmerkungen';
 $lang['heading']            = 'Annotierte Seiten';
-$lang['intro']              = 'Seiten mit Anmerkungen sowie deren normale und verwaiste Anzahl. Verwaiste Anmerkungen beziehen sich auf Text, der nicht mehr auf der Seite vorhanden ist.';
+$lang['intro']              = 'Seiten mit Anmerkungen sowie deren normale, erledigte und verwaiste Anzahl. Erledigte Anmerkungen wurden als erledigt markiert; verwaiste Anmerkungen beziehen sich auf Text, der nicht mehr auf der Seite vorhanden ist. Die Zählungen überschneiden sich – eine erledigte Anmerkung wird je nachdem, ob ihr Text noch vorhanden ist, auch als normal oder verwaist gezählt.';
 
 $lang['th_page']            = 'Seite';
 $lang['th_normal']          = 'Normal';
+$lang['th_resolved']        = 'Erledigt';
 $lang['th_orphaned']        = 'Verwaist';
 $lang['th_actions']         = 'Aktionen';
 
 $lang['filter_search']      = 'Suchen';
 $lang['filter_clear']       = 'Zurücksetzen';
 
-$lang['btn_clear_orphaned'] = 'Verwaiste entfernen';
-$lang['btn_clear_all']      = 'Alle verwaisten entfernen (%d)';
+$lang['btn_clear_orphaned']      = 'Verwaiste entfernen';
+$lang['btn_clear_all']           = 'Alle verwaisten entfernen (%d)';
+$lang['btn_clear_resolved']      = 'Erledigte entfernen';
+$lang['btn_clear_resolved_all']  = 'Alle erledigten entfernen (%d)';
 
-$lang['confirm_clear_page'] = 'Alle verwaisten Anmerkungen auf dieser Seite löschen?';
-$lang['confirm_clear_all']  = 'Alle verwaisten Anmerkungen auf allen Seiten löschen?';
+$lang['confirm_clear_page']          = 'Alle verwaisten Anmerkungen auf dieser Seite löschen?';
+$lang['confirm_clear_all']           = 'Alle verwaisten Anmerkungen auf allen Seiten löschen?';
+$lang['confirm_clear_resolved_page'] = 'Alle erledigten Anmerkungen auf dieser Seite löschen?';
+$lang['confirm_clear_resolved_all']  = 'Alle erledigten Anmerkungen auf allen Seiten löschen?';
 
-$lang['cleared_page']       = '%d verwaiste Anmerkung(en) von %s entfernt.';
-$lang['cleared_all']        = '%d verwaiste Anmerkung(en) auf allen Seiten entfernt.';
-$lang['clear_fail']         = 'Verwaiste Anmerkungen konnten nicht entfernt werden.';
+$lang['cleared_page']           = '%d verwaiste Anmerkung(en) von %s entfernt.';
+$lang['cleared_all']            = '%d verwaiste Anmerkung(en) auf allen Seiten entfernt.';
+$lang['clear_fail']             = 'Verwaiste Anmerkungen konnten nicht entfernt werden.';
+$lang['cleared_resolved_page']  = '%d erledigte Anmerkung(en) von %s entfernt.';
+$lang['cleared_resolved_all']   = '%d erledigte Anmerkung(en) auf allen Seiten entfernt.';
+$lang['clear_resolved_fail']    = 'Erledigte Anmerkungen konnten nicht entfernt werden.';
 
 $lang['none']               = 'Keine Seite hat Anmerkungen.';
 $lang['none_match']         = 'Keine Seite entspricht Ihrer Suche.';

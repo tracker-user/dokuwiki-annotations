@@ -28,25 +28,33 @@ $lang['toggle_desc']  = 'Highlight annotated text and show the annotation panel 
 
 $lang['menu']               = 'Annotations';
 $lang['heading']            = 'Annotated pages';
-$lang['intro']              = 'Pages that have annotations, with their normal and orphaned counts. Orphaned annotations reference text that no longer appears on the page.';
+$lang['intro']              = 'Pages that have annotations, with their normal, resolved and orphaned counts. Resolved annotations have been marked done; orphaned annotations reference text that no longer appears on the page. The counts overlap — a resolved annotation is also counted as normal or orphaned depending on whether its text is still present.';
 
 $lang['th_page']            = 'Page';
 $lang['th_normal']          = 'Normal';
+$lang['th_resolved']        = 'Resolved';
 $lang['th_orphaned']        = 'Orphaned';
 $lang['th_actions']         = 'Actions';
 
 $lang['filter_search']      = 'Search';
 $lang['filter_clear']       = 'Clear';
 
-$lang['btn_clear_orphaned'] = 'Clear orphaned';
-$lang['btn_clear_all']      = 'Clear all orphaned (%d)';
+$lang['btn_clear_orphaned']      = 'Clear orphaned';
+$lang['btn_clear_all']           = 'Clear all orphaned (%d)';
+$lang['btn_clear_resolved']      = 'Clear resolved';
+$lang['btn_clear_resolved_all']  = 'Clear all resolved (%d)';
 
-$lang['confirm_clear_page'] = 'Delete all orphaned annotations on this page?';
-$lang['confirm_clear_all']  = 'Delete all orphaned annotations on every page?';
+$lang['confirm_clear_page']          = 'Delete all orphaned annotations on this page?';
+$lang['confirm_clear_all']           = 'Delete all orphaned annotations on every page?';
+$lang['confirm_clear_resolved_page'] = 'Delete all resolved annotations on this page?';
+$lang['confirm_clear_resolved_all']  = 'Delete all resolved annotations on every page?';
 
-$lang['cleared_page']       = 'Removed %d orphaned annotation(s) from %s.';
-$lang['cleared_all']        = 'Removed %d orphaned annotation(s) across all pages.';
-$lang['clear_fail']         = 'Could not clear orphaned annotations.';
+$lang['cleared_page']           = 'Removed %d orphaned annotation(s) from %s.';
+$lang['cleared_all']            = 'Removed %d orphaned annotation(s) across all pages.';
+$lang['clear_fail']             = 'Could not clear orphaned annotations.';
+$lang['cleared_resolved_page']  = 'Removed %d resolved annotation(s) from %s.';
+$lang['cleared_resolved_all']   = 'Removed %d resolved annotation(s) across all pages.';
+$lang['clear_resolved_fail']    = 'Could not clear resolved annotations.';
 
 $lang['none']               = 'No pages have annotations.';
 $lang['none_match']         = 'No pages match your search.';

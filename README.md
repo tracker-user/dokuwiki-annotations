@@ -8,7 +8,7 @@ Word- and sentence-level annotations on wiki pages, stored separately from the p
 - **Threaded replies** — any logged-in reader can reply to an annotation, or reply to another reply for a nested discussion.
 - **Open / Resolved status** — mark a discussion closed; resolved annotations turn green.
 - **Gutter markers** — small icons in the left margin show at a glance where annotations live.
-- **Orphan detection** — when the annotated text is removed from the page, the annotation is flagged as orphaned and stays reachable via the counter. Admins can bulk-delete orphans.
+- **Orphan detection** — when the annotated text is removed from the page, the annotation is flagged as orphaned and stays reachable via the counter. Orphaned annotations become read-only (they can only be deleted), and admins can bulk-delete them.
 - **Per-user toggle** — turn the annotation overlay on or off from your user preferences.
 - **No page revisions** — annotations live in a separate file per page; the wiki changelog is never touched.
 - **Localised interface** — English, German, Russian and Japanese, falling back to English for any untranslated string.
@@ -46,7 +46,7 @@ All settings live under **Admin → Configuration Settings → annotations**:
 
 Annotated text is highlighted in **amber** (open) or **green** (resolved). Click any highlight to open the thread panel inline below that paragraph.
 
-The counter bar above the page content shows how many annotations the page has. If some are orphaned (their text was deleted), a clickable "N orphaned" link opens a drawer at the bottom of the page with those threads.
+The counter bar above the page content shows how many annotations the page has. If some are orphaned (their text was deleted), a clickable "N orphaned" link opens a drawer at the bottom of the page with those threads. Orphaned annotations are read-only — the quoted text is gone, so they can no longer be resolved, reopened or edited; the thread still shows in full and its author (or an admin) can delete it.
 
 ### Creating an annotation
 
@@ -82,13 +82,21 @@ Admins see two extra buttons in the counter bar:
 
 ### Admin: annotated-pages overview
 
-**Admin → Annotations** lists every page that has annotations, with a **Normal** count
-(annotations whose quoted text is still on the page) and an **Orphaned** count (annotations
-whose text was deleted from the page):
+**Admin → Annotations** lists every page that has annotations, with three counts:
 
-- **Search** by page title or ID, and **sort** by page title, normal count, or orphaned count.
-- **Clear orphaned** on a row removes just that page's orphaned annotations.
-- **Clear all orphaned (N)** at the top removes orphaned annotations across every page at once.
+- **Normal** — annotations whose quoted text is still on the page.
+- **Resolved** — annotations marked done (whatever their anchoring state).
+- **Orphaned** — annotations whose text was deleted from the page.
+
+The counts overlap on purpose: each one matches exactly what its clear button removes, so a
+resolved annotation is also counted under **Normal** or **Orphaned** depending on whether its
+text is still present.
+
+- **Search** by page title or ID, and **sort** by page title or any of the three counts.
+- **Clear resolved** on a row removes just that page's resolved annotations; **Clear orphaned**
+  removes just that page's orphaned ones.
+- **Clear all resolved (N)** and **Clear all orphaned (N)** at the top apply the matching sweep
+  across every page at once.
 
 Each clear re-checks the page server-side before deleting, so the counts are authoritative even
 if the page changed since it was last viewed. Long lists are paginated (`entries_per_page`).

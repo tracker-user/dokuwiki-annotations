@@ -3,9 +3,9 @@
 /**
  * Annotations plugin — admin overview.
  *
- * Lists every page that has stored annotations, with its normal (present) and
- * orphaned counts, and lets an admin clear orphaned annotations for one page or
- * for every annotated page at once.
+ * Lists every page that has stored annotations, with its normal (present),
+ * resolved and orphaned counts, and lets an admin clear resolved or orphaned
+ * annotations for one page or for every annotated page at once.
  *
  * The table reuses the JS-free pattern shared by the lastseen and usersettings
  * admin panels: sortable column headers, a per-column text filter (only the
@@ -27,7 +27,7 @@ use dokuwiki\Utf8\PhpString;
 class admin_plugin_annotations extends AdminPlugin
 {
     /** @var string[] columns that may be sorted */
-    protected $sortable = ['page', 'normal', 'orphaned'];
+    protected $sortable = ['page', 'normal', 'resolved', 'orphaned'];
 
     /**
      * Admin only — clearing annotations is an admin operation (helper::canClear).
@@ -103,6 +103,19 @@ class admin_plugin_annotations extends AdminPlugin
         } elseif ($action === 'clear_orphaned_all') {
             $count = $helper->clearOrphanedAll();
             msg(sprintf($this->getLang('cleared_all'), $count), 1);
+        } elseif ($action === 'clear_resolved') {
+            $page = cleanID($INPUT->post->str('clearpage'));
+            if ($page !== '') {
+                $count = $helper->clearResolved($page);
+                if ($count === false) {
+                    msg($this->getLang('clear_resolved_fail'), -1);
+                } else {
+                    msg(sprintf($this->getLang('cleared_resolved_page'), $count, hsc($page)), 1);
+                }
+            }
+        } elseif ($action === 'clear_resolved_all') {
+            $count = $helper->clearResolvedAll();
+            msg(sprintf($this->getLang('cleared_resolved_all'), $count), 1);
         }
 
         send_redirect(wl($ID, $this->standingParams(), true, '&'));
@@ -142,8 +155,10 @@ class admin_plugin_annotations extends AdminPlugin
         }
 
         $totalOrphaned = 0;
+        $totalResolved = 0;
         foreach ($rows as $r) {
             $totalOrphaned += $r['orphaned'];
+            $totalResolved += $r['resolved'];
         }
 
         // request parameters
@@ -163,19 +178,25 @@ class admin_plugin_annotations extends AdminPlugin
         echo '<p>' . hsc($this->getLang('intro')) . '</p>';
 
         // wiki-wide clear-all (counts all annotated pages, not just the filtered
-        // view); the button targets the POST form rendered at the end via form=
+        // view); each button targets a POST form rendered at the end via form=
         echo '<div class="annotations_admin_bar">';
+        if ($totalResolved > 0) {
+            echo '<button type="submit" form="ann_clear_resolved_all" class="button"'
+               . $this->confirmAttr('confirm_clear_resolved_all') . '>'
+               . hsc(sprintf($this->getLang('btn_clear_resolved_all'), $totalResolved)) . '</button>';
+        }
         if ($totalOrphaned > 0) {
-            echo '<button type="submit" form="ann_clear_all" class="button"'
+            echo '<button type="submit" form="ann_clear_orphaned_all" class="button"'
                . $this->confirmAttr('confirm_clear_all') . '>'
                . hsc(sprintf($this->getLang('btn_clear_all'), $totalOrphaned)) . '</button>';
         }
         echo '</div>';
 
-        $cols   = ['page', 'normal', 'orphaned', 'actions'];
+        $cols   = ['page', 'normal', 'resolved', 'orphaned', 'actions'];
         $labels = [
             'page'     => $this->getLang('th_page'),
             'normal'   => $this->getLang('th_normal'),
+            'resolved' => $this->getLang('th_resolved'),
             'orphaned' => $this->getLang('th_orphaned'),
             'actions'  => $this->getLang('th_actions'),
         ];
@@ -228,10 +249,11 @@ class admin_plugin_annotations extends AdminPlugin
     }
 
     /**
-     * One table row per annotated page: counts plus, when a page has orphans, a
-     * per-page "clear orphaned" submit button.
+     * One table row per annotated page: counts plus per-page "clear resolved"
+     * and "clear orphaned" submit buttons, each shown only when that page has
+     * something of its kind to clear.
      *
-     * @param array $row ['id','title','normal','orphaned']
+     * @param array $row ['id','title','normal','resolved','orphaned']
      * @return string
      */
     protected function renderRow(array $row)
@@ -248,11 +270,21 @@ class admin_plugin_annotations extends AdminPlugin
         $html .= '</td>';
 
         $html .= '<td class="annotations_admin_num">' . ((int) $row['normal']) . '</td>';
+        $html .= '<td class="annotations_admin_num">' . ((int) $row['resolved']) . '</td>';
         $html .= '<td class="annotations_admin_num">' . ((int) $row['orphaned']) . '</td>';
 
         $html .= '<td class="annotations_admin_actions">';
+        if ($row['resolved'] > 0) {
+            $html .= '<button type="submit" form="ann_clear_resolved_single" class="button"'
+                  . ' name="clearpage" value="' . hsc($row['id']) . '"'
+                  . $this->confirmAttr('confirm_clear_resolved_page') . '>'
+                  . hsc($this->getLang('btn_clear_resolved')) . '</button>';
+        }
         if ($row['orphaned'] > 0) {
-            $html .= '<button type="submit" form="ann_clear_single" class="button"'
+            if ($row['resolved'] > 0) {
+                $html .= ' ';
+            }
+            $html .= '<button type="submit" form="ann_clear_orphaned_single" class="button"'
                   . ' name="clearpage" value="' . hsc($row['id']) . '"'
                   . $this->confirmAttr('confirm_clear_page') . '>'
                   . hsc($this->getLang('btn_clear_orphaned')) . '</button>';
@@ -268,7 +300,7 @@ class admin_plugin_annotations extends AdminPlugin
      * but the count is re-checked here too).
      *
      * @param helper_plugin_annotations $helper
-     * @return array list of ['id','title','normal','orphaned']
+     * @return array list of ['id','title','normal','resolved','orphaned']
      */
     protected function buildRows($helper)
     {
@@ -286,6 +318,7 @@ class admin_plugin_annotations extends AdminPlugin
                 'id'       => $id,
                 'title'    => $title,
                 'normal'   => $counts['normal'],
+                'resolved' => $counts['resolved'],
                 'orphaned' => $counts['orphaned'],
             ];
         }
@@ -364,7 +397,7 @@ class admin_plugin_annotations extends AdminPlugin
     protected function sortRows(array $rows, $sort, $dir)
     {
         usort($rows, static function ($a, $b) use ($sort) {
-            if ($sort === 'normal' || $sort === 'orphaned') {
+            if ($sort === 'normal' || $sort === 'resolved' || $sort === 'orphaned') {
                 $cmp = $a[$sort] <=> $b[$sort];
             } else {
                 $cmp = strcasecmp((string) $a['title'], (string) $b['title']);
@@ -625,38 +658,49 @@ class admin_plugin_annotations extends AdminPlugin
     // ---------------------------------------------------------------------
 
     /**
-     * The two POST forms the clear buttons submit (via the HTML5 form= attr):
-     * one for a single page (the page id arrives from the button's value) and
-     * one for the wiki-wide sweep. Both carry the CSRF token and the standing
-     * sort/filter/page so the Post/Redirect/Get lands back on the same view.
+     * The four POST forms the clear buttons submit (via the HTML5 form= attr):
+     * a single-page and a wiki-wide form for each of "clear resolved" and "clear
+     * orphaned". For the single-page forms the page id arrives from the button's
+     * value (name="clearpage"). Every form carries the CSRF token and the
+     * standing sort/filter/page so the Post/Redirect/Get lands back on the same
+     * view.
      *
      * @return string
      */
     protected function clearForms()
     {
         global $ID;
-        $action = DOKU_BASE . DOKU_SCRIPT;
-        $std    = $this->standingHiddenFields();
-
+        $std   = $this->standingHiddenFields();
         $base  = '<input type="hidden" name="id" value="' . hsc($ID) . '" />';
         $base .= '<input type="hidden" name="do" value="admin" />';
         $base .= '<input type="hidden" name="page" value="annotations" />';
 
-        $single  = '<form id="ann_clear_single" method="post" action="' . $action . '" class="annotations_admin_post">';
-        $single .= formSecurityToken(false);
-        $single .= $base;
-        $single .= '<input type="hidden" name="annotations_action" value="clear_orphaned" />';
-        $single .= $std;
-        $single .= '</form>';
+        return $this->clearForm('ann_clear_resolved_single', 'clear_resolved', $base, $std)
+             . $this->clearForm('ann_clear_resolved_all', 'clear_resolved_all', $base, $std)
+             . $this->clearForm('ann_clear_orphaned_single', 'clear_orphaned', $base, $std)
+             . $this->clearForm('ann_clear_orphaned_all', 'clear_orphaned_all', $base, $std);
+    }
 
-        $all  = '<form id="ann_clear_all" method="post" action="' . $action . '" class="annotations_admin_post">';
-        $all .= formSecurityToken(false);
-        $all .= $base;
-        $all .= '<input type="hidden" name="annotations_action" value="clear_orphaned_all" />';
-        $all .= $std;
-        $all .= '</form>';
-
-        return $single . $all;
+    /**
+     * One clear-action POST form, targeted by its buttons via the HTML5 form=
+     * attribute.
+     *
+     * @param string $formId DOM id the buttons reference
+     * @param string $action value of the annotations_action field
+     * @param string $base   shared hidden fields (id/do/page)
+     * @param string $std    standing sort/filter/page hidden fields
+     * @return string
+     */
+    protected function clearForm($formId, $action, $base, $std)
+    {
+        $html  = '<form id="' . hsc($formId) . '" method="post" action="'
+               . DOKU_BASE . DOKU_SCRIPT . '" class="annotations_admin_post">';
+        $html .= formSecurityToken(false);
+        $html .= $base;
+        $html .= '<input type="hidden" name="annotations_action" value="' . hsc($action) . '" />';
+        $html .= $std;
+        $html .= '</form>';
+        return $html;
     }
 
     /**

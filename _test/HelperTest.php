@@ -190,6 +190,29 @@ class HelperTest extends DokuWikiTest
         $this->assertEquals($keep['id'], $remaining[0]['id']);
     }
 
+    public function testClearResolvedAllAcrossPages(): void
+    {
+        $h = $this->helper();
+        $ids = ['anntest:resweepa', 'anntest:resweepb'];
+        foreach ($ids as $id) {
+            $h->createAnnotation($id, ['exact' => 'keep open'], 'alice', 'open');
+            $done = $h->createAnnotation($id, ['exact' => 'mark done'], 'alice', 'done');
+            $h->setStatus($id, $done['id'], 'resolved', 'alice');
+        }
+
+        // clearResolvedAll() is wiki-wide and the shared test data dir may carry
+        // resolved annotations from earlier tests, so assert the seeded ones are
+        // included (>= 2) rather than an exact global total, and verify each of
+        // our pages keeps exactly its one open annotation.
+        $removed = $h->clearResolvedAll();
+        $this->assertGreaterThanOrEqual(2, $removed, 'at least the two seeded resolved are cleared');
+        foreach ($ids as $id) {
+            $remaining = $h->getAnnotations($id);
+            $this->assertCount(1, $remaining, $id . ' keeps only the open annotation');
+            $this->assertEquals('open', $remaining[0]['body'], $id . ' kept the right annotation');
+        }
+    }
+
     // -----------------------------------------------------------------
     //  Orphan detection against a rendered page
     // -----------------------------------------------------------------
@@ -247,7 +270,26 @@ class HelperTest extends DokuWikiTest
         $h->createAnnotation($id, ['exact' => 'text that is not here'], 'alice', 'gone');
 
         $this->assertEquals(
-            ['total' => 2, 'normal' => 1, 'orphaned' => 1],
+            ['total' => 2, 'normal' => 1, 'resolved' => 0, 'orphaned' => 1],
+            $h->pageCounts($id)
+        );
+    }
+
+    public function testPageCountsCountsResolvedAcrossFacets(): void
+    {
+        $id = 'anntest:countsres';
+        saveWikiText($id, 'Hello world, this is a wiki page about cats.', 'setup');
+
+        $h = $this->helper();
+        // present + resolved → counted in both normal and resolved
+        $present = $h->createAnnotation($id, ['exact' => 'wiki page about cats'], 'alice', 'present');
+        $h->setStatus($id, $present['id'], 'resolved', 'alice');
+        // orphaned + resolved → counted in both orphaned and resolved
+        $gone = $h->createAnnotation($id, ['exact' => 'text that is not here'], 'alice', 'gone');
+        $h->setStatus($id, $gone['id'], 'resolved', 'alice');
+
+        $this->assertEquals(
+            ['total' => 2, 'normal' => 1, 'resolved' => 2, 'orphaned' => 1],
             $h->pageCounts($id)
         );
     }
@@ -256,7 +298,7 @@ class HelperTest extends DokuWikiTest
     {
         $h = $this->helper();
         $this->assertEquals(
-            ['total' => 0, 'normal' => 0, 'orphaned' => 0],
+            ['total' => 0, 'normal' => 0, 'resolved' => 0, 'orphaned' => 0],
             $h->pageCounts('anntest:never')
         );
     }

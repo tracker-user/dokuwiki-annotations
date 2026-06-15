@@ -29,7 +29,7 @@ Hypothes.is and `ep_comments_page`:
 | `plugin.info.txt` | Manifest: name, author, version date, description, repository URL. |
 | `helper.php` | The per-page store, all CRUD, server-side orphan detection, and the **permission rules as the single source of truth**. Pure logic — permission methods take facts (user, admin flag, ACL level) as parameters and read no globals. |
 | `action.php` | Event registration; injecting the page payload into `JSINFO`; the AJAX endpoint and **permission enforcement** (gathers facts from DokuWiki globals, calls the helper). |
-| `admin.php` | Admin-only wiki-wide overview (**Admin → Annotations**): lists annotated pages with normal/orphaned counts; per-page and wiki-wide "clear orphaned". Reuses the `lastseen`/`usersettings` sortable + filterable + paginated table machinery. |
+| `admin.php` | Admin-only wiki-wide overview (**Admin → Annotations**): lists annotated pages with normal/resolved/orphaned counts; per-page and wiki-wide "clear resolved" and "clear orphaned". Reuses the `lastseen`/`usersettings` sortable + filterable + paginated table machinery. |
 | `script.js` | All front-end behaviour: boot/gate, load + re-anchor, highlights, gutter markers, counter, selection→new-annotation flow, thread panels, and AJAX. Plain IIFE, vanilla JS. |
 | `style.css` | Styling via DokuWiki theme tokens (`__background__`, `__text__`, …). The amber (open) / green (resolved) highlight hues come from the `--ann-open-rgb` / `--ann-resolved-rgb` custom properties that `action.php` injects from config (with `:root` fallbacks here). |
 | `lang/<iso>/lang.php` | The usersettings toggle label/description (PHP side) plus the front-end UI strings under `$lang['js']`, exposed to `script.js` as `LANG.plugins.annotations`. Ships `en`, `de`, `ru`, `ja`. |
@@ -112,7 +112,10 @@ highlight, no gutter marker).
 
 - **Client (live UI).** Anything `findRange` cannot anchor on page load is
   counted as orphaned; the count feeds the counter bar, and the orphaned link
-  opens a drawer at the bottom of the content area with those threads.
+  opens a drawer at the bottom of the content area with those threads. Orphan
+  threads render **read-only**: `buildThreadEntry` gates the Resolve/Reopen and
+  Edit buttons on `!ann._orphaned`, leaving only Delete (for the author or an
+  admin), since the quoted text is gone and there is nothing left to anchor.
 - **Server (authoritative, `findOrphaned`).** For the admin "clear orphaned"
   action the page is rendered with `p_wiki_xhtml`, block-closing tags are turned
   into spaces, tags/entities are stripped, whitespace normalised, and each
@@ -122,8 +125,9 @@ highlight, no gutter marker).
 ## Admin overview (`admin.php`)
 
 `admin_plugin_annotations` (**Admin → Annotations**, admin-only) is the wiki-wide companion to
-the per-page counter-bar buttons: it lists every annotated page with its **Normal** (present)
-and **Orphaned** counts and offers a per-page and a wiki-wide "clear orphaned".
+the per-page counter-bar buttons: it lists every annotated page with its **Normal** (present),
+**Resolved** and **Orphaned** counts and offers a per-page and a wiki-wide clear for each of
+"resolved" and "orphaned".
 
 - **Enumeration.** `helper::getAnnotatedPages()` runs DokuWiki's `search()` over
   `$conf['metadir']` with the `searchAnnotations` callback, which maps every `*.annotations`
@@ -131,21 +135,28 @@ and **Orphaned** counts and offers a per-page and a wiki-wide "clear orphaned".
   were deleted). Counts come from `helper::pageCounts($id)`, which renders the page once
   (`getPageText`) and applies the shared `quoteMissing()` rule — the same rule `findOrphaned()`
   uses, so "Normal" on the overview means exactly "not orphaned".
+- **Overlapping facets.** `Normal`/`Orphaned` partition by anchoring (present vs. quote-gone);
+  `Resolved` counts `status === 'resolved'` regardless of anchoring. They deliberately overlap so
+  each column matches exactly what its clear button removes: `clearResolved()` deletes every
+  resolved annotation (present *or* orphaned), `clearOrphaned()` deletes every orphaned one
+  (open *or* resolved). A resolved-and-present annotation is therefore counted in both Normal and
+  Resolved; a resolved-and-orphaned one in both Orphaned and Resolved.
 - **Cost.** Detecting orphans requires rendering each annotated page; because the overview sorts
   and filters on the counts, every annotated page is processed per load. `p_wiki_xhtml` is
   render-cached, so steady-state cost is low; the first load after edits re-renders.
 - **Table.** Reuses the JS-free sortable-header + per-column-filter + numbered-pager pattern from
   `lastseen`/`usersettings`. Only the Page column is filterable (matching title **or** id); the
   count columns and the actions column are not. The `entries_per_page` config controls paging.
-- **Clearing.** Both clears are POST forms guarded by `checkSecurityToken()` and
+- **Clearing.** All four clears are POST forms guarded by `checkSecurityToken()` and
   `helper::canClear(auth_isadmin())`, with Post/Redirect/Get back to the same view. To avoid an
-  illegal nested `<form>` (the table sits inside the GET filter form), the two POST forms are
-  rendered as siblings *after* it and the buttons reach them via the HTML5 `form=` attribute; the
-  per-row button supplies its page id through `name="clearpage"` (**not** `page`, which selects the
-  admin component). `clearOrphanedAll()` loops the annotated pages applying the per-page
-  `clearOrphaned()`, so the authoritative re-check runs for each. Destructive buttons confirm via
-  an inline `onclick` (the message is `json_encode`d then `hsc`d, safe at both the JS-string and
-  attribute layers).
+  illegal nested `<form>` (the table sits inside the GET filter form), the POST forms
+  (`ann_clear_resolved_single`/`_all`, `ann_clear_orphaned_single`/`_all`, built by the shared
+  `clearForm()`) are rendered as siblings *after* it and the buttons reach them via the HTML5
+  `form=` attribute; each per-row button supplies its page id through `name="clearpage"` (**not**
+  `page`, which selects the admin component). `clearOrphanedAll()` / `clearResolvedAll()` loop the
+  annotated pages applying the per-page clear, so the authoritative re-check runs for each.
+  Destructive buttons confirm via an inline `onclick` (the message is `json_encode`d then `hsc`d,
+  safe at both the JS-string and attribute layers).
 
 ## JSINFO injection (important gotcha)
 
@@ -196,7 +207,7 @@ calls them. `isAdmin` is DokuWiki's `auth_isadmin()` (superuser / admin group).
 | Edit / delete own annotation | author (`canEditAnnotation`) |
 | Edit / delete own reply | author (`canEditReply`) |
 | Edit / delete **any** annotation or reply | admin (`canEditAnnotation` / `canEditReply`) |
-| Clear resolved / clear orphaned (per page) | admin (`canClear`) |
+| Clear resolved / clear orphaned (per page on-page, and per-page or wiki-wide in the admin overview) | admin (`canClear`) |
 | Load (read) annotations | `AUTH_READ` on the page |
 
 ## Security

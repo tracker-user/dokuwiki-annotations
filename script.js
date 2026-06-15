@@ -909,8 +909,14 @@
         var actions = document.createElement('div');
         actions.className = 'ann-actions';
 
-        // Resolve/Reopen (any reader)
-        if (_loggedIn) {
+        // An orphaned annotation is read-only: its quoted text is gone from the
+        // page, so resolving/reopening and editing the body no longer make sense.
+        // It keeps only the Delete button (for its author or an admin), so the
+        // only remaining action is to remove it.
+        var isOrphan = !!ann._orphaned;
+
+        // Resolve/Reopen (any reader) — not for orphans.
+        if (_loggedIn && !isOrphan) {
             var resolveBtn = document.createElement('button');
             resolveBtn.type = 'button';
             resolveBtn.className = 'ann-btn ann-btn-primary';
@@ -923,17 +929,19 @@
             actions.appendChild(resolveBtn);
         }
 
-        // Edit + Delete (own or admin)
+        // Edit (own or admin) — not for orphans; Delete stays available.
         var canEdit = _isAdmin || ann.author === currentUser();
         if (canEdit && _loggedIn) {
-            var editBtn = document.createElement('button');
-            editBtn.type = 'button';
-            editBtn.className = 'ann-btn';
-            editBtn.textContent = t('btn_edit', 'Edit');
-            editBtn.addEventListener('click', function () {
-                showEditForm(entry, ann, 'annotation');
-            });
-            actions.appendChild(editBtn);
+            if (!isOrphan) {
+                var editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.className = 'ann-btn';
+                editBtn.textContent = t('btn_edit', 'Edit');
+                editBtn.addEventListener('click', function () {
+                    showEditForm(entry, ann, 'annotation');
+                });
+                actions.appendChild(editBtn);
+            }
 
             var delBtn = document.createElement('button');
             delBtn.type = 'button';
