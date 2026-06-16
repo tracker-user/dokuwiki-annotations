@@ -2,6 +2,12 @@
 
 Word- and sentence-level annotations on wiki pages, stored separately from the page text with threaded replies. Inspired by [Hypothes.is](https://hypothes.is/) and [ep_comments_page](https://github.com/ether/ep_comments_page).
 
+![Annotated text with gutter markers and counter bar](images/annotations-screen1.png)
+![Open annotation thread with threaded reply](images/annotations-screen2.png)
+![Resolved annotation thread](images/annotations-screen3.png)
+![Orphaned annotations drawer](images/annotations-screen4.png)
+![Admin annotated-pages overview with counts per page](images/annotations-screen5.png)
+
 ## Features
 
 - **Text-quote anchoring** — select any word or sentence; the annotation is tied to the quoted text plus its surrounding context, so it survives minor edits to the page.
