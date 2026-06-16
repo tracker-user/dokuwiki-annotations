@@ -27,8 +27,9 @@
  *      / gutter markers / counter without a page reload.
  *
  *   6. ORPHANS: annotations that cannot be re-anchored are counted and
- *      reachable via the orphaned counter link; their panels open in a
- *      dedicated orphan drawer at the bottom of the content area.
+ *      reachable via the orphaned counter link; their full threads (root
+ *      message plus the read-only reply tree) render in a dedicated orphan
+ *      drawer at the bottom of the content area.
  *
  * FF78 ESR compatibility:
  *   - No #private fields, ??=, ||=, &&=, Array.at, structuredClone,
@@ -962,12 +963,15 @@
     /**
      * Build the DOM for one reply entry, indented according to its nesting depth.
      *
-     * @param {object} ann    parent annotation
-     * @param {object} reply
-     * @param {number} depth  0 = direct reply to annotation; 1+ = nested
+     * @param {object}  ann       parent annotation
+     * @param {object}  reply
+     * @param {number}  depth     0 = direct reply to annotation; 1+ = nested
+     * @param {boolean} [readOnly] omit the action buttons (reply/edit/delete);
+     *                             used by the orphan drawer, where the thread is
+     *                             shown for reading only
      * @returns {HTMLElement}
      */
-    function buildReplyEntry(ann, reply, depth) {
+    function buildReplyEntry(ann, reply, depth, readOnly) {
         var entry = document.createElement('div');
         entry.className = 'ann-thread-entry ann-reply';
         entry.dataset.replyId = reply.id;
@@ -983,6 +987,12 @@
         bodyEl.className = 'ann-body';
         bodyEl.textContent = reply.body;
         entry.appendChild(bodyEl);
+
+        // The orphan drawer renders the thread read-only: no reply, edit, or
+        // delete buttons on replies, mirroring the read-only root entry there.
+        if (readOnly) {
+            return entry;
+        }
 
         var actions = document.createElement('div');
         actions.className = 'ann-actions';
@@ -1067,12 +1077,13 @@
      * @param {object}      ann
      * @param {Array}       nodes  array of {reply, children} tree nodes
      * @param {number}      depth
+     * @param {boolean}     [readOnly] render entries without action buttons
      */
-    function appendReplyTree(panel, ann, nodes, depth) {
+    function appendReplyTree(panel, ann, nodes, depth, readOnly) {
         nodes.forEach(function (node) {
-            panel.appendChild(buildReplyEntry(ann, node.reply, depth));
+            panel.appendChild(buildReplyEntry(ann, node.reply, depth, readOnly));
             if (node.children.length > 0) {
-                appendReplyTree(panel, ann, node.children, depth + 1);
+                appendReplyTree(panel, ann, node.children, depth + 1, readOnly);
             }
         });
     }
@@ -1323,8 +1334,15 @@
         _annotations.forEach(function (ann) {
             if (!ann._orphaned) return;
             found = true;
-            var entry = buildThreadEntry(ann, true);
-            drawer.appendChild(entry);
+            // Show the whole thread, not just the root message: wrap the root
+            // entry and its full (read-only) reply tree in one container so
+            // multiple orphaned threads stay visually separated.
+            var thread = document.createElement('div');
+            thread.className = 'ann-orphan-thread';
+            thread.dataset.status = ann.status || 'open';
+            thread.appendChild(buildThreadEntry(ann, true));
+            appendReplyTree(thread, ann, buildReplyTree(ann.replies || []), 0, true);
+            drawer.appendChild(thread);
         });
 
         if (!found) {

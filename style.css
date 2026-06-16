@@ -453,6 +453,24 @@
     margin-bottom: 0.75em;
 }
 
+/* Each orphaned annotation renders as a full thread (root + replies). Wrap it
+   like an inline panel so multiple orphaned threads stay visually separated. */
+.ann-orphan-thread {
+    margin-bottom: 0.75em;
+    border: 1px solid __border__;
+    border-left: 3px solid ~"rgba(var(--ann-open-rgb), 0.7)";
+    background: __background_alt__;
+    contain: layout;
+}
+
+.ann-orphan-thread:last-child {
+    margin-bottom: 0;
+}
+
+.ann-orphan-thread[data-status="resolved"] {
+    border-left-color: ~"rgba(var(--ann-resolved-rgb), 0.6)";
+}
+
 /* =========================================================================
    Resolved annotation panels: shift to green accent
    ========================================================================= */
